@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Employee360 Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container-fluid dashboard-wrapper">
+
+    <header>
+        <div class="top-section">
+            <div>
+                <p class="small-title">Employee records & availability</p>
+                <h1>Employee360</h1>
+            </div>
+
+            <div class="kpi-box">
+                <div>
+                    <h2>{{ headcount }}</h2>
+                    <p>TOTAL EMPLOYEES</p>
+                </div>
+                <div>
+                    <h2>{{ avg_utilization }}%</h2>
+                    <p>AVG. UTILIZATION</p>
+                </div>
+                <div>
+                    <h2>{{ bench_count }}</h2>
+                    <p>ON BENCH</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <hr>
+
+    <form class="search-section">
+        <input
+            type="search"
+            id="searchBox"
+            class="search-input"
+            placeholder="Search by name or skill"
+            oninput="filterEmployees()">
+    </form>
+
+    <!-- BROWSE BY CATEGORY -->
+    <div class="filter-block category-filter-block">
+        <p class="filter-title">BROWSE BY CATEGORY</p>
+
+        <div class="category-container">
+            <button type="button"
+                    class="chip category-filter-chip active"
+                    onclick="clearCategoryAndSkill(this)">
+                All
+            </button>
+
+            {% for category, skills in skill_categories.items() %}
+            <button type="button"
+                    class="chip category-filter-chip"
+                    onclick="showCategorySkills('{{ category }}', this)">
+                {{ category }}
+            </button>
+            {% endfor %}
+        </div>
+
+        <div id="selectedSkills" class="selected-skills-box"></div>
+    </div>
+
+    <hr>
+
+    <div class="filter-block">
+        <p class="filter-title">STATUS</p>
+
+      {% for s in ["All", "Allocated", "On Bench", "Overallocated"] %}
+        <button type="button"
+                class="chip {% if s == 'All' %}active{% endif %}"
+                onclick="setStatusFilter('{{ s }}', this)">
+            {{ s }}
+        </button>
+        {% endfor %}
+    </div>
+
+    <hr>
+
+    <div class="filter-block">
+        <p class="filter-title">DEPARTMENT</p>
+
+        <button type="button" class="chip active" onclick="setDepartmentFilter('All', this)">
+            All
+        </button>
+
+        {% for dept in departments %}
+        <button type="button" class="chip" onclick="setDepartmentFilter('{{ dept.Department }}', this)">
+            {{ dept.Department }}
+        </button>
+        {% endfor %}
+    </div>
+
+    <div class="records-line">
+        <span id="visibleCount">{{ total_records }}</span> records
+    </div>
+
+    <div class="row g-4 employee-grid">
+
+        {% for emp in employees %}
+        <div class="col-md-4 employee-item"
+             onclick="openEmployeePanel(this)"
+             data-search="{{ emp.EmployeeName }} {{ emp.Skills or '' }}"
+             data-status="{{ emp.Status }}"
+             data-department="{{ emp.Department }}"
+             data-skills="{{ emp.Skills or '' }}"
+             data-name="{{ emp.EmployeeName }}"
+             data-id="{{ emp.EmployeeID }}"
+             data-email="{{ emp.Email }}"
+             data-designation="{{ emp.Designation }}"
+             data-departmentname="{{ emp.Department }}"
+             data-location="{{ emp.Location }}"
+             data-businessunit="{{ emp.BusinessUnit }}"
+             data-employmentstatus="{{ emp.EmploymentStatus }}"
+             data-experience="{{ emp.TotalExperience }}"
+             data-manager="{{ emp.ReportingManager }}"
+             data-utilization="{{ emp.AllocationPercentage }}"
+             data-active-projects='{{ emp.ActiveProjectList | tojson | e }}'
+             data-project=""
+             data-role="{{ emp.EmployeeRole }}"
+             data-projectstatus="{{ emp.ProjectStatus }}"
+             data-billable="{{ emp.BillableStatus }}"
+             data-certifications="{{ emp.Certifications }}"
+             data-courses="{{ emp.Courses }}"
+             data-performance="{{ emp.PerformanceRating }}"
+             data-awards="{{ emp.AwardsRecognition }}"
+             data-history="{{ emp.ProjectHistory }}">
+
+            <div class="employee-card">
+
+                <div class="card-top">
+                    <div class="avatar">{{ emp.Initials }}</div>
+
+                    <div>
+                        <h5>{{ emp.EmployeeName }}</h5>
+                        <p>{{ emp.Designation }}</p>
+                    </div>
+
+                   <span class="status-badge
+                    {% if emp.Status == 'On Bench' %}
+                        bench
+                    {% elif emp.Status == 'Overallocated' %}
+                        overallocated
+                    {% else %}
+                        allocated
+                    {% endif %}">
+                        {{ emp.Status }}
+                    </span>
+                </div>
+
+                <div class="meta">
+                    <span>🏢 {{ emp.Department }}</span>
+                    <span>📍 {{ emp.Location }}</span>
+                </div>
+
+                <div class="card-stacked-allocation-bar">
+                    {% if emp.ActiveProjectList %}
+                        {% for project in emp.ActiveProjectList %}
+                            <div class="allocation-segment project-color-{{ loop.index0 % 6 + 1 }}"
+                                 style="width: {% if emp.AllocationPercentage > 100 %}{{ (project.AllocationPercentage / emp.AllocationPercentage) * 100 }}{% else %}{{ project.AllocationPercentage }}{% endif %}%"
+                                 title="{{ project.ProjectName }} - {{ project.AllocationPercentage }}%">
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="allocation-segment-empty"></div>
+                    {% endif %}
+                </div>
+
+                <p class="util-text">{{ emp.AllocationPercentage }}% utilized</p>
+
+                {% if emp.ActiveProjectList %}
+                <div class="card-project-colors">
+                    {% for project in emp.ActiveProjectList[:3] %}
+                    <span>
+                        <i class="project-dot project-color-{{ loop.index0 % 6 + 1 }}"></i>
+                        {{ project.ProjectName }} {{ project.AllocationPercentage }}%
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="skills-list">
+    {% for skill in emp.SkillList[:3] %}
+        <span>{{ skill }}</span>
+    {% endfor %}
+
+    {% for skill in emp.SkillList[3:] %}
+        <span class="hidden-skill">{{ skill }}</span>
+    {% endfor %}
+
+    {% if emp.SkillList|length > 3 %}
+        <button type="button"
+                class="more-skills-btn"
+                onclick="toggleSkills(event, this)">
+            +{{ emp.SkillList|length - 3 }}
+        </button>
+    {% endif %}
+</div>
+
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+
+</div>
+
+<div class="overlay" id="overlay" onclick="closeEmployeePanel()"></div>
+
+<div class="side-panel" id="sidePanel">
+    <button class="close-btn" onclick="closeEmployeePanel()">×</button>
+    <div id="panelContent"></div>
+</div>
+
+<script>
+let selectedSkill = "All";
+let selectedStatus = "All";
+let selectedDepartment = "All";
+
+const skillCategories = {{ skill_categories | tojson }};
+
+function showCategorySkills(categoryName, button) {
+    selectedSkill = "All";
+
+    const categoryButtons = document.querySelectorAll(".category-filter-chip");
+    categoryButtons.forEach(chip => chip.classList.remove("active"));
+    button.classList.add("active");
+
+    const selectedSkillsBox = document.getElementById("selectedSkills");
+    selectedSkillsBox.innerHTML = "";
+
+    const skills = skillCategories[categoryName] || [];
+
+    skills.forEach(skill => {
+        const skillButton = document.createElement("button");
+        skillButton.type = "button";
+        skillButton.className = "chip skill-filter-chip";
+        skillButton.innerHTML = skill.name + " (" + skill.count + ")";
+
+        skillButton.onclick = function () {
+            setSkillFilter(skill.name, skillButton);
+        };
+
+        selectedSkillsBox.appendChild(skillButton);
+    });
+
+    filterEmployees();
+}
+
+function clearCategoryAndSkill(button) {
+    selectedSkill = "All";
+
+    const categoryButtons = document.querySelectorAll(".category-filter-chip");
+    categoryButtons.forEach(chip => chip.classList.remove("active"));
+    button.classList.add("active");
+
+    document.getElementById("selectedSkills").innerHTML = "";
+
+    filterEmployees();
+}
+
+function setSkillFilter(skill, button) {
+    selectedSkill = skill;
+
+    const skillButtons = document.querySelectorAll(".skill-filter-chip");
+    skillButtons.forEach(chip => chip.classList.remove("active"));
+
+    button.classList.add("active");
+    filterEmployees();
+}
+
+function setStatusFilter(status, button) {
+    selectedStatus = status;
+    setActive(button);
+    filterEmployees();
+}
+
+function setDepartmentFilter(department, button) {
+    selectedDepartment = department;
+    setActive(button);
+    filterEmployees();
+}
+
+function setActive(button) {
+    const parent = button.parentElement;
+    const chips = parent.querySelectorAll(".chip");
+
+    chips.forEach(chip => chip.classList.remove("active"));
+    button.classList.add("active");
+}
+
+function filterEmployees() {
+    const searchValue = document.getElementById("searchBox").value.toLowerCase();
+    const employees = document.querySelectorAll(".employee-item");
+    let visibleCount = 0;
+
+    employees.forEach(employee => {
+        const searchText = employee.dataset.search.toLowerCase();
+        const status = employee.dataset.status;
+        const department = employee.dataset.department;
+        const skills = employee.dataset.skills.toLowerCase();
+
+        const searchMatch = searchText.includes(searchValue);
+        const statusMatch = selectedStatus === "All" || status === selectedStatus;
+        const departmentMatch = selectedDepartment === "All" || department === selectedDepartment;
+        const skillMatch = selectedSkill === "All" || skills.includes(selectedSkill.toLowerCase());
+
+        if (searchMatch && statusMatch && departmentMatch && skillMatch) {
+            employee.style.display = "block";
+            visibleCount++;
+        } else {
+            employee.style.display = "none";
+        }
+    });
+
+    document.getElementById("visibleCount").innerText = visibleCount;
+}
+
+function openEmployeePanel(card) {
+    const panel = document.getElementById("sidePanel");
+    const overlay = document.getElementById("overlay");
+    const content = document.getElementById("panelContent");
+
+    const utilizationValue = Number(card.dataset.utilization || 0);
+
+    let activeProjects = [];
+    try {
+        activeProjects = JSON.parse(card.dataset.activeProjects || "[]");
+    } catch (error) {
+        activeProjects = [];
+    }
+
+    const totalProjectAllocation = activeProjects.reduce((total, project) => {
+        return total + Number(project.AllocationPercentage || 0);
+    }, 0);
+
+    const maxBarValue = totalProjectAllocation > 100 ? totalProjectAllocation : 100;
+
+    let allocationSegmentsHTML = "";
+    let allocationDetailsHTML = "";
+
+    if (activeProjects.length > 0) {
+        activeProjects.forEach((project, index) => {
+            const projectAllocation = Number(project.AllocationPercentage || 0);
+            const segmentWidth = (projectAllocation / maxBarValue) * 100;
+            const colorClass = "project-color-" + ((index % 6) + 1);
+
+            allocationSegmentsHTML += `
+                <div class="allocation-segment ${colorClass}"
+                     style="width:${segmentWidth}%"
+                     title="${project.ProjectName} - ${projectAllocation}%">
+                </div>
+            `;
+
+            allocationDetailsHTML += `
+                <div class="allocation-project-row">
+                    <div class="allocation-project-left">
+                        <span class="project-dot ${colorClass}"></span>
+                        <div>
+                            <p class="allocation-project-name">${project.ProjectName || "Unnamed Project"}</p>
+                            <p class="allocation-project-role">${project.EmployeeRole || "N/A"}</p>
+                        </div>
+                    </div>
+                    <strong>${projectAllocation}%</strong>
+                </div>
+            `;
+        });
+    } else {
+        allocationSegmentsHTML = `<div class="allocation-segment-empty"></div>`;
+        allocationDetailsHTML = `<p class="no-active-projects">No projects in progress</p>`;
+    }
+
+    const skillsArray = (card.dataset.skills || "")
+        .split(",")
+        .map(skill => skill.trim())
+        .filter(skill => skill !== "");
+
+    let skillsHTML = "";
+    if (skillsArray.length > 0) {
+        skillsArray.forEach(skill => {
+            skillsHTML += `<span>${skill}</span>`;
+        });
+    } else {
+        skillsHTML = `<p>No skills available</p>`;
+    }
+
+    content.innerHTML = `
+        <div class="panel-top">
+            <button class="back-btn" onclick="closeEmployeePanel()">← Back to roster</button>
+        </div>
+
+        <div class="panel-header">
+            <div class="panel-avatar">${getInitials(card.dataset.name)}</div>
+            <div>
+                <h3>${card.dataset.name || "N/A"}</h3>
+                <p>${card.dataset.designation || "No designation"} · ${card.dataset.departmentname || "N/A"}</p>
+                <p class="panel-small">📍 ${card.dataset.location || "N/A"} &nbsp; ✉ ${card.dataset.email || "N/A"}</p>
+            </div>
+        </div>
+
+        <div class="details-section">
+            <h5>💼 CURRENT ALLOCATION</h5>
+
+            <div class="stacked-allocation-bar">
+                ${allocationSegmentsHTML}
+            </div>
+
+            <p class="util-text">${totalProjectAllocation}% utilized</p>
+
+            <div class="allocation-project-list">
+                ${allocationDetailsHTML}
+            </div>
+        </div>
+
+        <div class="details-section">
+            <h5>📈 SKILLS</h5>
+            <div class="panel-skills-list">
+                ${skillsHTML}
+            </div>
+        </div>
+
+        <div class="details-section">
+            <h5>📋 BASIC DETAILS</h5>
+            <div class="two-column-details">
+                <p><b>Employee ID:</b> ${card.dataset.id || "N/A"}</p>
+                <p><b>Business Unit:</b> ${card.dataset.businessunit || "N/A"}</p>
+                <p><b>Experience:</b> ${card.dataset.experience || "N/A"} years</p>
+                <p><b>Manager:</b> ${card.dataset.manager || "N/A"}</p>
+                <p><b>Employment:</b> ${card.dataset.employmentstatus || "N/A"}</p>
+                <p><b>Department:</b> ${card.dataset.departmentname || "N/A"}</p>
+            </div>
+        </div>
+
+        <div class="details-section">
+            <h5>🎖 CERTIFICATIONS</h5>
+            <div class="project-box">${card.dataset.certifications || "No certifications available"}</div>
+        </div>
+
+        <div class="details-section two-column-section">
+            <div>
+                <h5>🎓 COURSES</h5>
+                <p>${card.dataset.courses || "No courses available"}</p>
+            </div>
+            <div>
+                <h5>⭐ PERFORMANCE</h5>
+                <p>${card.dataset.performance || "No rating available"}</p>
+            </div>
+        </div>
+
+        <div class="details-section two-column-section">
+            <div>
+                <h5>🏆 AWARDS</h5>
+                <p>${card.dataset.awards || "No awards available"}</p>
+            </div>
+            <div>
+                <h5>📁 PROJECT HISTORY</h5>
+                <p>${card.dataset.history || "No project history available"}</p>
+            </div>
+        </div>
+    `;
+
+    overlay.classList.add("show-overlay");
+    panel.classList.add("show-panel");
+}
+
+function closeEmployeePanel() {
+    document.getElementById("overlay").classList.remove("show-overlay");
+    document.getElementById("sidePanel").classList.remove("show-panel");
+}
+
+function getInitials(name) {
+    if (!name) return "NA";
+    return name.split(" ").slice(0, 2).map(word => word[0]).join("").toUpperCase();
+}
+function toggleSkills(event, button) {
+    event.stopPropagation();
+
+    const skillsList = button.parentElement;
+    const hiddenSkills = skillsList.querySelectorAll(".hidden-skill");
+
+    hiddenSkills.forEach(skill => {
+        skill.classList.toggle("show-skill");
+    });
+
+    if (button.innerText.startsWith("+")) {
+        button.innerText = "Show Less";
+    } else {
+        button.innerText = "+" + hiddenSkills.length;
+    }
+}
+</script>
+
+</body>
+</html>
