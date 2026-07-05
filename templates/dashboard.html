@@ -18,18 +18,18 @@
             </div>
 
             <div class="kpi-box">
-                <div>
+                <button type="button" class="kpi-card" onclick="openKpiDrill('employees')">
                     <h2>{{ headcount }}</h2>
                     <p>TOTAL EMPLOYEES</p>
-                </div>
-                <div>
+                </button>
+                <button type="button" class="kpi-card" onclick="openKpiDrill('utilization')">
                     <h2>{{ avg_utilization }}%</h2>
                     <p>AVG. UTILIZATION</p>
-                </div>
-                <div>
+                </button>
+                <button type="button" class="kpi-card" onclick="openKpiDrill('bench')">
                     <h2>{{ bench_count }}</h2>
                     <p>ON BENCH</p>
-                </div>
+                </button>
             </div>
         </div>
     </header>
@@ -219,12 +219,26 @@
     <div id="panelContent"></div>
 </div>
 
+<div class="kpi-modal-overlay" id="kpiModalOverlay" onclick="closeKpiDrill()"></div>
+<div class="kpi-modal" id="kpiModal">
+    <div class="kpi-modal-header">
+        <h3 id="kpiModalTitle">Drill Down</h3>
+        <button type="button" onclick="closeKpiDrill()">×</button>
+    </div>
+    <div class="kpi-modal-body" id="kpiModalBody"></div>
+</div>
+
 <script>
 let selectedSkill = "All";
 let selectedStatus = "All";
 let selectedDepartment = "All";
 
 const skillCategories = {{ skill_categories | tojson }};
+const employeeDrillData = {{ employee_drill_data | tojson }};
+const deptUtilData = {{ dept_util_data | tojson }};
+const utilizationDrillData = {{ utilization_drill_data | tojson }};
+const benchDrillData = {{ bench_drill_data | tojson }};
+const benchBucketData = {{ bench_bucket_data | tojson }};
 
 function showCategorySkills(categoryName, button) {
     selectedSkill = "All";
@@ -495,6 +509,194 @@ function toggleSkills(event, button) {
         button.innerText = "+" + hiddenSkills.length;
     }
 }
+
+function openKpiDrill(type) {
+    const modal = document.getElementById("kpiModal");
+    const overlay = document.getElementById("kpiModalOverlay");
+    const title = document.getElementById("kpiModalTitle");
+    const body = document.getElementById("kpiModalBody");
+
+    if (type === "employees") {
+        title.innerText = "Total Employees";
+        body.innerHTML = renderTotalEmployeesDrill();
+    } else if (type === "utilization") {
+        title.innerText = "Average Utilization";
+        body.innerHTML = renderUtilizationDrill();
+    } else if (type === "bench") {
+        title.innerText = "On Bench";
+        body.innerHTML = renderBenchDrill();
+    }
+
+    overlay.classList.add("show-kpi-modal-overlay");
+    modal.classList.add("show-kpi-modal");
+}
+
+function closeKpiDrill() {
+    document.getElementById("kpiModalOverlay").classList.remove("show-kpi-modal-overlay");
+    document.getElementById("kpiModal").classList.remove("show-kpi-modal");
+}
+
+function renderTotalEmployeesDrill() {
+    let rows = "";
+    let currentDepartment = "";
+    let departmentCounts = {};
+
+    employeeDrillData.forEach(emp => {
+        const dept = emp.Department || "No Department";
+        departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+    });
+
+    employeeDrillData.forEach(emp => {
+        const dept = emp.Department || "No Department";
+
+        if (dept !== currentDepartment) {
+            currentDepartment = dept;
+
+            rows += `
+                <tr class="department-group-row">
+                    <td colspan="4">${dept} (${departmentCounts[dept]} employees)</td>
+                </tr>
+            `;
+        }
+
+        rows += `
+            <tr>
+                <td>${emp.EmployeeID || "N/A"}</td>
+                <td>${emp.EmployeeName || "N/A"}</td>
+                <td>${emp.Department || "N/A"}</td>
+                <td>${emp.Designation || "N/A"}</td>
+            </tr>
+        `;
+    });
+
+    return `
+        <div class="drill-summary-box">
+            <strong>${employeeDrillData.length}</strong>
+            <span>Total employee records</span>
+        </div>
+
+        <div class="drill-table-wrapper">
+            <table class="drill-table">
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>Employee Name</th>
+                        <th>Department</th>
+                        <th>Designation</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderUtilizationDrill() {
+    let chartHTML = "";
+    let employeeRows = "";
+
+    deptUtilData.forEach(dept => {
+        const value = Number(dept.AvgUtilization || 0);
+        const barWidth = value > 100 ? 100 : value;
+
+        chartHTML += `
+            <div class="util-chart-row">
+                <div class="util-chart-label">${dept.Department || "N/A"}</div>
+                <div class="util-chart-track">
+                    <div class="util-chart-fill" style="width:${barWidth}%"></div>
+                </div>
+                <strong>${value}%</strong>
+            </div>
+        `;
+    });
+
+    utilizationDrillData.forEach(emp => {
+        employeeRows += `
+            <tr>
+                <td>${emp.EmployeeID || "N/A"}</td>
+                <td>${emp.EmployeeName || "N/A"}</td>
+                <td>${emp.Department || "N/A"}</td>
+                <td>${emp.Designation || "N/A"}</td>
+                <td><b>${emp.Utilization || 0}%</b></td>
+            </tr>
+        `;
+    });
+
+    return `
+        <h4 class="drill-subtitle">Department-wise Utilization</h4>
+        <div class="util-chart-box">${chartHTML}</div>
+
+        <h4 class="drill-subtitle">Employee-wise Utilization</h4>
+        <div class="drill-table-wrapper">
+            <table class="drill-table">
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>Employee Name</th>
+                        <th>Department</th>
+                        <th>Designation</th>
+                        <th>Utilization</th>
+                    </tr>
+                </thead>
+                <tbody>${employeeRows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderBenchDrill() {
+    let bucketHTML = "";
+    let rows = "";
+
+    Object.keys(benchBucketData).forEach(bucket => {
+        bucketHTML += `
+            <div class="bench-bucket-card">
+                <strong>${benchBucketData[bucket]}</strong>
+                <span>${bucket}</span>
+            </div>
+        `;
+    });
+
+    benchDrillData.forEach(emp => {
+        const benchDays = emp.BenchDays === null || emp.BenchDays === undefined ? "Not Available" : emp.BenchDays + " days";
+
+        rows += `
+            <tr>
+                <td>${emp.EmployeeID || "N/A"}</td>
+                <td>${emp.EmployeeName || "N/A"}</td>
+                <td>${emp.Department || "N/A"}</td>
+                <td>${emp.Designation || "N/A"}</td>
+                <td>${benchDays}</td>
+                <td>${emp.BenchBucket || "Not Available"}</td>
+            </tr>
+        `;
+    });
+
+    return `
+        <h4 class="drill-subtitle">Bench Duration</h4>
+        <div class="bench-bucket-grid">${bucketHTML}</div>
+
+        <h4 class="drill-subtitle">Bench Employee List</h4>
+        <div class="drill-table-wrapper">
+            <table class="drill-table">
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>Employee Name</th>
+                        <th>Department</th>
+                        <th>Designation</th>
+                        <th>Bench Days</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+
+       
+    `;
+}
+
 </script>
 
 </body>

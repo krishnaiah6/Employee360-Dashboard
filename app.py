@@ -1,7 +1,28 @@
 from flask import Flask, render_template, request
 import mysql.connector
+from decimal import Decimal
+from datetime import date, datetime
 
 app = Flask(__name__)
+
+
+def make_json_safe(rows):
+    safe_rows = []
+
+    for row in rows:
+        safe_row = {}
+
+        for key, value in row.items():
+            if isinstance(value, Decimal):
+                safe_row[key] = float(value)
+            elif isinstance(value, (date, datetime)):
+                safe_row[key] = value.strftime("%Y-%m-%d")
+            else:
+                safe_row[key] = value
+
+        safe_rows.append(safe_row)
+
+    return safe_rows
 
 
 def get_connection():
@@ -305,6 +326,161 @@ def dashboard():
         if status == "All" or emp["Status"] == status:
             filtered_employees.append(emp)
 
+
+    # Drill-down: Total Employees list
+    cursor.execute("""
+        SELECT
+            EmployeeID,
+            EmployeeName,
+            Department,
+            Designation
+        FROM hrms_data
+        ORDER BY
+            Department ASC,
+            EmployeeID ASC
+    """)
+    employee_drill_data = cursor.fetchall()
+
+    # Drill-down: Department-wise utilization
+    cursor.execute("""
+        SELECT
+            h.Department,
+            ROUND(AVG(COALESCE(emp_alloc.TotalAllocation, 0)), 2) AS AvgUtilization
+        FROM hrms_data h
+        LEFT JOIN (
+            SELECT
+                EmployeeID,
+                SUM(
+                    CASE
+                        WHEN ProjectStatus = 'In Progress'
+                        THEN AllocationPercentage
+                        ELSE 0
+                    END
+                ) AS TotalAllocation
+            FROM project_management
+            GROUP BY EmployeeID
+        ) emp_alloc
+            ON h.EmployeeID = emp_alloc.EmployeeID
+        GROUP BY h.Department
+        ORDER BY AvgUtilization DESC
+    """)
+    dept_util_data = cursor.fetchall()
+
+    # Drill-down: Employee-wise utilization
+    cursor.execute("""
+        SELECT
+            h.EmployeeID,
+            h.EmployeeName,
+            h.Department,
+            h.Designation,
+            COALESCE(emp_alloc.TotalAllocation, 0) AS Utilization
+        FROM hrms_data h
+        LEFT JOIN (
+            SELECT
+                EmployeeID,
+                SUM(
+                    CASE
+                        WHEN ProjectStatus = 'In Progress'
+                        THEN AllocationPercentage
+                        ELSE 0
+                    END
+                ) AS TotalAllocation
+            FROM project_management
+            GROUP BY EmployeeID
+        ) emp_alloc
+            ON h.EmployeeID = emp_alloc.EmployeeID
+        ORDER BY Utilization DESC, h.EmployeeName
+    """)
+    utilization_drill_data = cursor.fetchall()
+
+    # Drill-down: Bench employees
+    # If your DB has BenchStartDate / ReleaseDate / ProjectEndDate / EndDate, bench days will be calculated.
+    # If not, BenchDays will show as Not Available.
+    cursor.execute("""
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'project_management'
+    """)
+    pm_columns = [row["COLUMN_NAME"] for row in cursor.fetchall()]
+
+    bench_date_column = None
+    for possible_column in ["BenchStartDate", "ReleaseDate", "ProjectEndDate", "EndDate", "ActualEndDate"]:
+        if possible_column in pm_columns:
+            bench_date_column = possible_column
+            break
+
+    if bench_date_column:
+        bench_days_sql = f"DATEDIFF(CURDATE(), MAX(p.{bench_date_column}))"
+        bench_date_sql = f"MAX(p.{bench_date_column})"
+    else:
+        bench_days_sql = "NULL"
+        bench_date_sql = "NULL"
+
+    cursor.execute(f"""
+        SELECT
+            h.EmployeeID,
+            h.EmployeeName,
+            h.Department,
+            h.Designation,
+            {bench_date_sql} AS BenchStartDate,
+            {bench_days_sql} AS BenchDays
+        FROM hrms_data h
+        LEFT JOIN project_management p
+            ON h.EmployeeID = p.EmployeeID
+        LEFT JOIN (
+            SELECT
+                EmployeeID,
+                SUM(
+                    CASE
+                        WHEN ProjectStatus = 'In Progress'
+                        THEN AllocationPercentage
+                        ELSE 0
+                    END
+                ) AS TotalAllocation
+            FROM project_management
+            GROUP BY EmployeeID
+        ) emp_alloc
+            ON h.EmployeeID = emp_alloc.EmployeeID
+        WHERE COALESCE(emp_alloc.TotalAllocation, 0) = 0
+        GROUP BY
+            h.EmployeeID,
+            h.EmployeeName,
+            h.Department,
+            h.Designation
+            ORDER BY
+            BenchDays IS NULL,
+            BenchDays DESC,
+            h.EmployeeName ASC
+    """)
+    bench_drill_data = cursor.fetchall()
+
+    bench_bucket_data = {
+        "0-30 days": 0,
+        "31-60 days": 0,
+        "60+ days": 0,
+        "Not Available": 0
+    }
+
+    for bench_emp in bench_drill_data:
+        bench_days = bench_emp.get("BenchDays")
+
+        if bench_days is None:
+            bench_emp["BenchBucket"] = "Not Available"
+        elif bench_days <= 30:
+            bench_emp["BenchBucket"] = "0-30 days"
+        elif bench_days <= 60:
+            bench_emp["BenchBucket"] = "31-60 days"
+        else:
+            bench_emp["BenchBucket"] = "60+ days"
+
+        bench_bucket_data[bench_emp["BenchBucket"]] += 1
+
+    employee_drill_data = make_json_safe(employee_drill_data)
+    dept_util_data = make_json_safe(dept_util_data)
+    utilization_drill_data = make_json_safe(utilization_drill_data)
+    bench_drill_data = make_json_safe(bench_drill_data)
+
     cursor.close()
     conn.close()
 
@@ -320,6 +496,11 @@ def dashboard():
         selected_status=status,
         selected_department=department,
         selected_skill=skill,
+        employee_drill_data=employee_drill_data,
+        dept_util_data=dept_util_data,
+        utilization_drill_data=utilization_drill_data,
+        bench_drill_data=bench_drill_data,
+        bench_bucket_data=bench_bucket_data,
         total_records=len(filtered_employees)
     )
 
