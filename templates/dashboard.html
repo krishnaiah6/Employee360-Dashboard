@@ -13,8 +13,7 @@
     <header>
         <div class="top-section">
             <div>
-                <p class="small-title">Employee records & availability</p>
-                <h1>Employee360</h1>
+                <h1>Anblicks Resource Management</h1>
             </div>
 
             <div class="kpi-box">
@@ -66,6 +65,7 @@
         </div>
 
         <div id="selectedSkills" class="selected-skills-box"></div>
+        <div id="chosenSkillsBox" class="chosen-skills-box"></div>
     </div>
 
     <hr>
@@ -229,7 +229,7 @@
 </div>
 
 <script>
-let selectedSkill = "All";
+let selectedSkills = [];
 let selectedStatus = "All";
 let selectedDepartment = "All";
 
@@ -241,12 +241,9 @@ const benchDrillData = {{ bench_drill_data | tojson }};
 const benchBucketData = {{ bench_bucket_data | tojson }};
 
 function showCategorySkills(categoryName, button) {
-    selectedSkill = "All";
-
-    const categoryButtons = document.querySelectorAll(".category-filter-chip");
+   const categoryButtons = document.querySelectorAll(".category-filter-chip");
     categoryButtons.forEach(chip => chip.classList.remove("active"));
     button.classList.add("active");
-
     const selectedSkillsBox = document.getElementById("selectedSkills");
     selectedSkillsBox.innerHTML = "";
 
@@ -269,7 +266,7 @@ function showCategorySkills(categoryName, button) {
 }
 
 function clearCategoryAndSkill(button) {
-    selectedSkill = "All";
+    selectedSkills = [];
 
     const categoryButtons = document.querySelectorAll(".category-filter-chip");
     categoryButtons.forEach(chip => chip.classList.remove("active"));
@@ -281,13 +278,42 @@ function clearCategoryAndSkill(button) {
 }
 
 function setSkillFilter(skill, button) {
-    selectedSkill = skill;
+    if (selectedSkills.includes(skill)) {
+        selectedSkills = selectedSkills.filter(s => s !== skill);
+        button.classList.remove("active");
+    } else {
+        selectedSkills.push(skill);
+        button.classList.add("active");
+    }
 
-    const skillButtons = document.querySelectorAll(".skill-filter-chip");
-    skillButtons.forEach(chip => chip.classList.remove("active"));
-
-    button.classList.add("active");
+    updateChosenSkillsBox();
     filterEmployees();
+}
+function updateChosenSkillsBox() {
+    const box = document.getElementById("chosenSkillsBox");
+    box.innerHTML = "";
+
+    selectedSkills.forEach(skill => {
+        const selectedBtn = document.createElement("button");
+        selectedBtn.type = "button";
+        selectedBtn.className = "selected-skill-chip";
+        selectedBtn.innerHTML = skill + " ×";
+
+        selectedBtn.onclick = function () {
+            selectedSkills = selectedSkills.filter(s => s !== skill);
+
+            document.querySelectorAll(".skill-filter-chip").forEach(btn => {
+                if (btn.innerText.startsWith(skill + " ")) {
+                    btn.classList.remove("active");
+                }
+            });
+
+            updateChosenSkillsBox();
+            filterEmployees();
+        };
+
+        box.appendChild(selectedBtn);
+    });
 }
 
 function setStatusFilter(status, button) {
@@ -311,9 +337,14 @@ function setActive(button) {
 }
 
 function filterEmployees() {
-    const searchValue = document.getElementById("searchBox").value.toLowerCase();
+    const searchValue = document.getElementById("searchBox").value.toLowerCase().trim();
     const employees = document.querySelectorAll(".employee-item");
     let visibleCount = 0;
+
+    const searchSkills = searchValue
+        .split(",")
+        .map(skill => skill.trim())
+        .filter(skill => skill !== "");
 
     employees.forEach(employee => {
         const searchText = employee.dataset.search.toLowerCase();
@@ -321,11 +352,34 @@ function filterEmployees() {
         const department = employee.dataset.department;
         const skills = employee.dataset.skills.toLowerCase();
 
-        const searchMatch = searchText.includes(searchValue);
+        let searchMatch = true;
+
+        if (searchValue !== "") {
+            if (searchValue.includes(",")) {
+               const employeeSkillsArray = skills
+                    .split(",")
+                    .map(skill => skill.trim().toLowerCase());
+
+                searchMatch = searchSkills.every(skill =>
+                     employeeSkillsArray.includes(skill)
+                );
+            } else {
+                searchMatch = searchText.includes(searchValue);
+            }
+        }
+
         const statusMatch = selectedStatus === "All" || status === selectedStatus;
         const departmentMatch = selectedDepartment === "All" || department === selectedDepartment;
-        const skillMatch = selectedSkill === "All" || skills.includes(selectedSkill.toLowerCase());
 
+        const employeeSkillsArrayForFilter = skills
+            .split(",")
+            .map(skill => skill.trim().toLowerCase());
+
+        const skillMatch =
+              selectedSkills.length === 0 ||
+              selectedSkills.every(skill =>
+               employeeSkillsArrayForFilter.includes(skill.toLowerCase())
+          );
         if (searchMatch && statusMatch && departmentMatch && skillMatch) {
             employee.style.display = "block";
             visibleCount++;

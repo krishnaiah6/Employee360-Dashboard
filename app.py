@@ -132,9 +132,6 @@ def dashboard():
         })
 
     # Employee cards query
-    # Important fix:
-    # Allocation is calculated in the alloc subquery first.
-    # This prevents wrong 300% / 900% values caused by joins with skills/lms/history.
     query = """
         SELECT
             h.EmployeeID,
