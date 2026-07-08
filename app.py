@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import mysql.connector
 from decimal import Decimal
 from datetime import date, datetime
+import os
 
 app = Flask(__name__)
 
@@ -24,13 +25,13 @@ def make_json_safe(rows):
 
     return safe_rows
 
-
 def get_connection():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="LESNAR@1p",
-        database="employee360"
+        host=os.environ.get("DB_HOST"),
+        user=os.environ.get("DB_USER"),
+        password=os.environ.get("DB_PASSWORD"),
+        database=os.environ.get("DB_NAME"),
+        port=int(os.environ.get("DB_PORT"))
     )
 
 
