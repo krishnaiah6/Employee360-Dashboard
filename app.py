@@ -190,6 +190,7 @@ def dashboard():
 
             GROUP_CONCAT(DISTINCT s.SkillName SEPARATOR ', ') AS Skills,
             GROUP_CONCAT(DISTINCT s.SkillLevel SEPARATOR ', ') AS SkillLevels,
+            GROUP_CONCAT(DISTINCT TRIM(s.CategoryName) SEPARATOR ', ') AS SkillCategories,
 
             GROUP_CONCAT(DISTINCT l.CertificationName SEPARATOR ', ') AS Certifications,
             GROUP_CONCAT(DISTINCT l.CourseName SEPARATOR ', ') AS Courses,
@@ -317,6 +318,7 @@ def dashboard():
         emp["Initials"] = "".join([part[0] for part in name_parts[:2]]).upper()
 
         emp["SkillList"] = emp["Skills"].split(", ") if emp["Skills"] else []
+        emp["SkillCategoryList"] = emp["SkillCategories"].split(", ") if emp["SkillCategories"] else []
         emp["CertificationList"] = emp["Certifications"].split(", ") if emp["Certifications"] else []
         emp["CourseList"] = emp["Courses"].split(", ") if emp["Courses"] else []
         emp["ProjectHistoryList"] = emp["ProjectHistory"].split(", ") if emp["ProjectHistory"] else []

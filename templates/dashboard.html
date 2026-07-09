@@ -111,6 +111,7 @@
              data-status="{{ emp.Status }}"
              data-department="{{ emp.Department }}"
              data-skills="{{ emp.Skills or '' }}"
+             data-categories="{{ emp.SkillCategories or '' }}"
              data-name="{{ emp.EmployeeName }}"
              data-id="{{ emp.EmployeeID }}"
              data-email="{{ emp.Email }}"
@@ -232,6 +233,7 @@
 let selectedSkills = [];
 let selectedStatus = "All";
 let selectedDepartment = "All";
+let selectedCategory = "All";
 
 const skillCategories = {{ skill_categories | tojson }};
 const employeeDrillData = {{ employee_drill_data | tojson }};
@@ -241,9 +243,14 @@ const benchDrillData = {{ bench_drill_data | tojson }};
 const benchBucketData = {{ bench_bucket_data | tojson }};
 
 function showCategorySkills(categoryName, button) {
-   const categoryButtons = document.querySelectorAll(".category-filter-chip");
+    selectedCategory = categoryName;
+    selectedSkills = [];
+    updateChosenSkillsBox();
+
+    const categoryButtons = document.querySelectorAll(".category-filter-chip");
     categoryButtons.forEach(chip => chip.classList.remove("active"));
     button.classList.add("active");
+
     const selectedSkillsBox = document.getElementById("selectedSkills");
     selectedSkillsBox.innerHTML = "";
 
@@ -266,7 +273,9 @@ function showCategorySkills(categoryName, button) {
 }
 
 function clearCategoryAndSkill(button) {
+    selectedCategory = "All";
     selectedSkills = [];
+    updateChosenSkillsBox();
 
     const categoryButtons = document.querySelectorAll(".category-filter-chip");
     categoryButtons.forEach(chip => chip.classList.remove("active"));
@@ -351,6 +360,7 @@ function filterEmployees() {
         const status = employee.dataset.status;
         const department = employee.dataset.department;
         const skills = employee.dataset.skills.toLowerCase();
+        const categories = employee.dataset.categories.toLowerCase();
 
         let searchMatch = true;
 
@@ -371,6 +381,14 @@ function filterEmployees() {
         const statusMatch = selectedStatus === "All" || status === selectedStatus;
         const departmentMatch = selectedDepartment === "All" || department === selectedDepartment;
 
+        const employeeCategoriesArray = categories
+            .split(",")
+            .map(category => category.trim().toLowerCase());
+
+        const categoryMatch =
+            selectedCategory === "All" ||
+            employeeCategoriesArray.includes(selectedCategory.toLowerCase());
+
         const employeeSkillsArrayForFilter = skills
             .split(",")
             .map(skill => skill.trim().toLowerCase());
@@ -380,7 +398,7 @@ function filterEmployees() {
               selectedSkills.every(skill =>
                employeeSkillsArrayForFilter.includes(skill.toLowerCase())
           );
-        if (searchMatch && statusMatch && departmentMatch && skillMatch) {
+        if (searchMatch && statusMatch && departmentMatch && categoryMatch && skillMatch) {
             employee.style.display = "block";
             visibleCount++;
         } else {
