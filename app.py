@@ -27,11 +27,11 @@ def make_json_safe(rows):
 
 def get_connection():
     return mysql.connector.connect(
-        host=os.environ.get("DB_HOST"),
-        user=os.environ.get("DB_USER"),
-        password=os.environ.get("DB_PASSWORD"),
-        database=os.environ.get("DB_NAME"),
-        port=int(os.environ.get("DB_PORT"))
+        host=os.environ.get("DB_HOST", "localhost"),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", "your_mysql_password"),
+        database=os.environ.get("DB_NAME", "your_database_name"),
+        port=int(os.environ.get("DB_PORT", 3306))
     )
 
 
