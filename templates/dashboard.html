@@ -352,55 +352,91 @@ function setActive(button) {
 }
 
 function filterEmployees() {
-    const searchValue = document.getElementById("searchBox").value.toLowerCase().trim();
+    const searchValue = document
+        .getElementById("searchBox")
+        .value
+        .toLowerCase()
+        .trim();
+
     const employees = document.querySelectorAll(".employee-item");
     let visibleCount = 0;
 
     const searchSkills = searchValue
         .split(",")
-        .map(skill => skill.trim())
+        .map(skill => skill.trim().toLowerCase())
         .filter(skill => skill !== "");
 
     employees.forEach(employee => {
-        const searchText = employee.dataset.search.toLowerCase();
-        const status = employee.dataset.status;
-        const department = employee.dataset.department;
-        const skills = employee.dataset.skills.toLowerCase();
-        const categories = employee.dataset.categories.toLowerCase();
+        const searchText =
+            (employee.dataset.search || "").toLowerCase();
+
+        const status =
+            employee.dataset.status || "";
+
+        const department =
+            employee.dataset.department || "";
+
+        const skills =
+            (employee.dataset.skills || "").toLowerCase();
+
+        const categories =
+            (employee.dataset.categories || "").toLowerCase();
+
+        const employeeSkillsArray = skills
+            .split(",")
+            .map(skill => skill.trim())
+            .filter(skill => skill !== "");
+
+        const employeeCategoriesArray = categories
+            .split(",")
+            .map(category => category.trim())
+            .filter(category => category !== "");
 
         let searchMatch = true;
 
         if (searchValue !== "") {
             if (searchValue.includes(",")) {
-               const employeeSkillsArray = skills
-                    .split(",")
-                    .map(skill => skill.trim().toLowerCase());
-
-                searchMatch = searchSkills.every(skill =>
-                     employeeSkillsArray.includes(skill)
+                searchMatch = searchSkills.every(searchSkill =>
+                    employeeSkillsArray.includes(searchSkill)
                 );
             } else {
                 searchMatch = searchText.includes(searchValue);
             }
         }
 
-        const statusMatch = selectedStatus === "All" || status === selectedStatus;
-        const departmentMatch = selectedDepartment === "All" || department === selectedDepartment;
+        const statusMatch =
+            selectedStatus === "All" ||
+            status === selectedStatus;
 
-        // Category buttons are used only to display their skills.
-        // They must not restrict employees because selected skills can come
-        // from multiple categories.
+        const departmentMatch =
+            selectedDepartment === "All" ||
+            department === selectedDepartment;
 
-        const employeeSkillsArrayForFilter = skills
-            .split(",")
-            .map(skill => skill.trim().toLowerCase());
+        // Clicking a category shows employees who have at least
+        // one skill belonging to that category.
+        const categoryMatch =
+            selectedCategory === "All" ||
+            employeeCategoriesArray.includes(
+                selectedCategory.toLowerCase()
+            );
 
+        // Employees must possess all specifically selected skills.
+        // The selected skills may belong to different categories.
         const skillMatch =
-              selectedSkills.length === 0 ||
-              selectedSkills.every(skill =>
-               employeeSkillsArrayForFilter.includes(skill.toLowerCase())
-          );
-        if (searchMatch && statusMatch && departmentMatch && skillMatch) {
+            selectedSkills.length === 0 ||
+            selectedSkills.every(selectedSkill =>
+                employeeSkillsArray.includes(
+                    selectedSkill.toLowerCase()
+                )
+            );
+
+        if (
+            searchMatch &&
+            statusMatch &&
+            departmentMatch &&
+            categoryMatch &&
+            skillMatch
+        ) {
             employee.style.display = "block";
             visibleCount++;
         } else {
@@ -408,7 +444,8 @@ function filterEmployees() {
         }
     });
 
-    document.getElementById("visibleCount").innerText = visibleCount;
+    document.getElementById("visibleCount").innerText =
+        visibleCount;
 }
 
 function openEmployeePanel(card) {
