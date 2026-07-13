@@ -244,7 +244,8 @@ const benchBucketData = {{ bench_bucket_data | tojson }};
 
 function showCategorySkills(categoryName, button) {
     selectedCategory = categoryName;
-    selectedSkills = [];
+
+    // Keep skills selected from previously opened categories.
     updateChosenSkillsBox();
 
     const categoryButtons = document.querySelectorAll(".category-filter-chip");
@@ -261,6 +262,11 @@ function showCategorySkills(categoryName, button) {
         skillButton.type = "button";
         skillButton.className = "chip skill-filter-chip";
         skillButton.innerHTML = skill.name + " (" + skill.count + ")";
+
+        // Restore the active state when revisiting a category.
+        if (selectedSkills.includes(skill.name)) {
+            skillButton.classList.add("active");
+        }
 
         skillButton.onclick = function () {
             setSkillFilter(skill.name, skillButton);
@@ -381,13 +387,9 @@ function filterEmployees() {
         const statusMatch = selectedStatus === "All" || status === selectedStatus;
         const departmentMatch = selectedDepartment === "All" || department === selectedDepartment;
 
-        const employeeCategoriesArray = categories
-            .split(",")
-            .map(category => category.trim().toLowerCase());
-
-        const categoryMatch =
-            selectedCategory === "All" ||
-            employeeCategoriesArray.includes(selectedCategory.toLowerCase());
+        // Category buttons are used only to display their skills.
+        // They must not restrict employees because selected skills can come
+        // from multiple categories.
 
         const employeeSkillsArrayForFilter = skills
             .split(",")
@@ -398,7 +400,7 @@ function filterEmployees() {
               selectedSkills.every(skill =>
                employeeSkillsArrayForFilter.includes(skill.toLowerCase())
           );
-        if (searchMatch && statusMatch && departmentMatch && categoryMatch && skillMatch) {
+        if (searchMatch && statusMatch && departmentMatch && skillMatch) {
             employee.style.display = "block";
             visibleCount++;
         } else {
