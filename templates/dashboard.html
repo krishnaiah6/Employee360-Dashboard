@@ -8,6 +8,17 @@
 </head>
 <body>
 
+
+<div id="dashboardData"
+     hidden
+     data-skill-categories='{{ skill_categories | tojson | e }}'
+     data-employee-drill='{{ employee_drill_data | tojson | e }}'
+     data-dept-util='{{ dept_util_data | tojson | e }}'
+     data-utilization-drill='{{ utilization_drill_data | tojson | e }}'
+     data-bench-drill='{{ bench_drill_data | tojson | e }}'
+     data-bench-buckets='{{ bench_bucket_data | tojson | e }}'>
+</div>
+
 <div class="container-fluid dashboard-wrapper">
 
     <header>
@@ -124,6 +135,10 @@
              data-manager="{{ emp.ReportingManager }}"
              data-utilization="{{ emp.AllocationPercentage }}"
              data-active-projects='{{ emp.ActiveProjectList | tojson | e }}'
+             data-timeline-health="{{ emp.TimelineHealth }}"
+             data-nearest-project="{{ emp.NearestProjectName }}"
+             data-nearest-end-date="{{ emp.NearestProjectEndDate }}"
+             data-nearest-days="{{ emp.NearestProjectDaysRemaining if emp.NearestProjectDaysRemaining is not none else '' }}"
              data-project=""
              data-role="{{ emp.EmployeeRole }}"
              data-projectstatus="{{ emp.ProjectStatus }}"
@@ -167,7 +182,8 @@
                     {% if emp.ActiveProjectList %}
                         {% for project in emp.ActiveProjectList %}
                             <div class="allocation-segment project-color-{{ loop.index0 % 6 + 1 }}"
-                                 style="width: {% if emp.AllocationPercentage > 100 %}{{ (project.AllocationPercentage / emp.AllocationPercentage) * 100 }}{% else %}{{ project.AllocationPercentage }}{% endif %}%"
+                                 data-project-allocation="{{ project.AllocationPercentage }}"
+                                 data-total-allocation="{{ emp.AllocationPercentage }}"
                                  title="{{ project.ProjectName }} - {{ project.AllocationPercentage }}%">
                             </div>
                         {% endfor %}
@@ -186,6 +202,24 @@
                         {{ project.ProjectName }} {{ project.AllocationPercentage }}%
                     </span>
                     {% endfor %}
+                </div>
+
+                <div class="timeline-health-card health-{{ emp.TimelineHealth|lower|replace(' ', '-') }}">
+                    <div class="timeline-health-card-top">
+                        <span>Project Timeline Health</span>
+                        <strong>{{ emp.TimelineHealth }}</strong>
+                    </div>
+                    <div class="timeline-health-strip"></div>
+                    <small>
+                        {{ emp.NearestProjectName }} ·
+                        {% if emp.NearestProjectDaysRemaining == 0 %}
+                            ends today
+                        {% elif emp.NearestProjectDaysRemaining == 1 %}
+                            1 day remaining
+                        {% else %}
+                            {{ emp.NearestProjectDaysRemaining }} days remaining
+                        {% endif %}
+                    </small>
                 </div>
                 {% endif %}
 
@@ -237,12 +271,37 @@ let selectedStatus = "All";
 let selectedDepartment = "All";
 let selectedCategory = "All";
 
-const skillCategories = {{ skill_categories | tojson }};
-const employeeDrillData = {{ employee_drill_data | tojson }};
-const deptUtilData = {{ dept_util_data | tojson }};
-const utilizationDrillData = {{ utilization_drill_data | tojson }};
-const benchDrillData = {{ bench_drill_data | tojson }};
-const benchBucketData = {{ bench_bucket_data | tojson }};
+const dashboardData = document.getElementById("dashboardData");
+
+function parseDashboardData(attributeName, fallbackValue) {
+    try {
+        return JSON.parse(dashboardData.getAttribute(attributeName) || fallbackValue);
+    } catch (error) {
+        console.error(`Unable to parse ${attributeName}:`, error);
+        return JSON.parse(fallbackValue);
+    }
+}
+
+const skillCategories = parseDashboardData("data-skill-categories", "{}");
+const employeeDrillData = parseDashboardData("data-employee-drill", "[]");
+const deptUtilData = parseDashboardData("data-dept-util", "[]");
+const utilizationDrillData = parseDashboardData("data-utilization-drill", "[]");
+const benchDrillData = parseDashboardData("data-bench-drill", "[]");
+const benchBucketData = parseDashboardData("data-bench-buckets", "{}");
+
+function initializeAllocationBars() {
+    document.querySelectorAll(".card-stacked-allocation-bar .allocation-segment").forEach(segment => {
+        const projectAllocation = Number(segment.dataset.projectAllocation || 0);
+        const totalAllocation = Number(segment.dataset.totalAllocation || 0);
+        const width = totalAllocation > 100 && totalAllocation > 0
+            ? (projectAllocation / totalAllocation) * 100
+            : projectAllocation;
+
+        segment.style.width = `${Math.max(0, Math.min(width, 100))}%`;
+    });
+}
+
+document.addEventListener("DOMContentLoaded", initializeAllocationBars);
 
 function showCategorySkills(categoryName, button) {
     selectedCategory = categoryName;
@@ -472,16 +531,36 @@ function openEmployeePanel(card) {
                 </div>
             `;
 
+            const daysRemaining = Number(project.DaysRemaining || 0);
+            let remainingText = `${daysRemaining} days remaining`;
+
+            if (daysRemaining === 0) {
+                remainingText = "Ends today";
+            } else if (daysRemaining === 1) {
+                remainingText = "1 day remaining";
+            }
+
+            const healthClass = String(project.ProjectHealth || "Healthy")
+                .toLowerCase()
+                .replaceAll(" ", "-");
+
             allocationDetailsHTML += `
-                <div class="allocation-project-row">
+                <div class="allocation-project-row allocation-project-health-row">
                     <div class="allocation-project-left">
                         <span class="project-dot ${colorClass}"></span>
                         <div>
                             <p class="allocation-project-name">${project.ProjectName || "Unnamed Project"}</p>
                             <p class="allocation-project-role">${project.EmployeeRole || "N/A"}</p>
+                            <p class="allocation-project-date">Ends: ${project.ProjectEndDate || "N/A"} · ${remainingText}</p>
+                            <div class="project-health-line health-${healthClass}">
+                                <div class="project-health-fill"></div>
+                            </div>
                         </div>
                     </div>
-                    <strong>${projectAllocation}%</strong>
+                    <div class="project-health-side">
+                        <strong>${projectAllocation}%</strong>
+                        <span class="project-health-badge health-${healthClass}">${project.ProjectHealth || "Healthy"}</span>
+                    </div>
                 </div>
             `;
         });

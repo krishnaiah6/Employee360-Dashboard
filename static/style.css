@@ -979,3 +979,49 @@ body{
     color:#475467;
     background:#eaecf0;
 }
+
+/* Updated Project Timeline states */
+.health-on-track .timeline-health-strip::after,
+.project-health-line.health-on-track .project-health-fill{
+    background:#198754;
+}
+
+.health-approaching-completion .timeline-health-strip::after,
+.project-health-line.health-approaching-completion .project-health-fill{
+    background:#f0ad00;
+}
+
+.health-closing-soon .timeline-health-strip::after,
+.project-health-line.health-closing-soon .project-health-fill{
+    background:#dc3545;
+}
+
+.health-date-not-set .timeline-health-strip::after,
+.project-health-line.health-date-not-set .project-health-fill{
+    background:#98a2b3;
+}
+
+.health-on-track strong{ color:#198754; }
+.health-approaching-completion strong{ color:#9a6700; }
+.health-closing-soon strong{ color:#b42318; }
+.health-date-not-set strong{ color:#667085; }
+
+.project-health-badge.health-on-track{
+    color:#087443;
+    background:#dcfce7;
+}
+
+.project-health-badge.health-approaching-completion{
+    color:#855a00;
+    background:#fff3cd;
+}
+
+.project-health-badge.health-closing-soon{
+    color:#a61b1b;
+    background:#fee2e2;
+}
+
+.project-health-badge.health-date-not-set{
+    color:#475467;
+    background:#eaecf0;
+}

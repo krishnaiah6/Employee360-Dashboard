@@ -26,12 +26,13 @@ def make_json_safe(rows):
     return safe_rows
 
 def get_connection():
+    """Use local MySQL by default and Railway variables when deployed."""
     return mysql.connector.connect(
-        host=os.environ.get("DB_HOST", "localhost"),
-        user=os.environ.get("DB_USER", "root"),
-        password=os.environ.get("DB_PASSWORD", "your_mysql_password"),
-        database=os.environ.get("DB_NAME", "your_database_name"),
-        port=int(os.environ.get("DB_PORT", 3306))
+        host="hayabusa.proxy.rlwy.net",
+        port="41674",
+        user="root",
+        password="qLFkWxwOkYwzENoveWwmicKqyRZIMXjk",
+        database="railway",
     )
 
 
@@ -147,27 +148,7 @@ def dashboard():
             h.ReportingManager,
 
             COALESCE(alloc.TotalAllocation, 0) AS AllocationPercentage,
-
-            GROUP_CONCAT(DISTINCT
-                CASE
-                    WHEN p.ProjectStatus = 'In Progress'
-                    THEN CONCAT(
-                        COALESCE(p.ProjectName, ''), '|',
-                        COALESCE(p.EmployeeRole, ''), '|',
-                        COALESCE(p.AllocationPercentage, 0), '|',
-                        COALESCE(p.BillableStatus, ''), '|',
-                        COALESCE(DATE_FORMAT(p.ProjectEndDate, '%Y-%m-%d'), ''), '|',
-                        COALESCE(DATEDIFF(p.ProjectEndDate, CURDATE()), 0), '|',
-                        CASE
-                            WHEN p.ProjectEndDate < CURDATE() THEN 'Completed'
-                            WHEN DATEDIFF(p.ProjectEndDate, CURDATE()) <= 15 THEN 'Ending Soon'
-                            WHEN DATEDIFF(p.ProjectEndDate, CURDATE()) <= 30 THEN 'Attention'
-                            ELSE 'Healthy'
-                        END
-                    )
-                END
-                SEPARATOR ';;'
-            ) AS ActiveProjects,
+            NULL AS ActiveProjects,
 
             GROUP_CONCAT(DISTINCT
                 CASE
@@ -292,36 +273,85 @@ def dashboard():
     cursor.execute(query, params)
     employees = cursor.fetchall()
 
+    # Load active projects separately so timeline data is never lost through
+    # GROUP_CONCAT truncation or duplicate rows from the other joins.
+    cursor.execute("""
+        SELECT
+            EmployeeID,
+            ProjectID,
+            ProjectName,
+            EmployeeRole,
+            AllocationPercentage,
+            BillableStatus,
+            DATE_FORMAT(ProjectStartDate, '%Y-%m-%d') AS ProjectStartDate,
+            DATE_FORMAT(ProjectEndDate, '%Y-%m-%d') AS ProjectEndDate,
+            CASE
+                WHEN ProjectEndDate IS NULL THEN NULL
+                ELSE DATEDIFF(ProjectEndDate, CURDATE())
+            END AS DaysRemaining,
+            CASE
+                WHEN ProjectEndDate IS NULL THEN 'Date Not Set'
+                WHEN ProjectEndDate < CURDATE() THEN 'Completed'
+                WHEN DATEDIFF(ProjectEndDate, CURDATE()) <= 15 THEN 'Closing Soon'
+                WHEN DATEDIFF(ProjectEndDate, CURDATE()) <= 30 THEN 'Approaching Completion'
+                ELSE 'On Track'
+            END AS ProjectHealth
+        FROM project_management
+        WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
+        ORDER BY
+            EmployeeID,
+            ProjectEndDate IS NULL,
+            ProjectEndDate,
+            ProjectName
+    """)
+    active_project_rows = cursor.fetchall()
+
+    active_projects_by_employee = {}
+
+    for project in active_project_rows:
+        employee_key = str(project["EmployeeID"])
+
+        allocation_value = project.get("AllocationPercentage") or 0
+        if isinstance(allocation_value, Decimal):
+            allocation_value = float(allocation_value)
+
+        days_remaining = project.get("DaysRemaining")
+        if days_remaining is not None:
+            days_remaining = int(days_remaining)
+
+        active_projects_by_employee.setdefault(employee_key, []).append({
+            "ProjectID": project.get("ProjectID") or "",
+            "ProjectName": project.get("ProjectName") or "Unnamed Project",
+            "EmployeeRole": project.get("EmployeeRole") or "N/A",
+            "AllocationPercentage": float(allocation_value),
+            "BillableStatus": project.get("BillableStatus") or "N/A",
+            "ProjectStartDate": project.get("ProjectStartDate") or "",
+            "ProjectEndDate": project.get("ProjectEndDate") or "",
+            "DaysRemaining": days_remaining,
+            "ProjectHealth": project.get("ProjectHealth") or "Date Not Set"
+        })
+
     filtered_employees = []
 
     for emp in employees:
         utilization = emp["AllocationPercentage"] or 0
 
-        active_projects = []
-
-        if emp.get("ActiveProjects"):
-            project_items = emp["ActiveProjects"].split(";;")
-
-            for item in project_items:
-                parts = item.split("|")
-
-                if len(parts) == 7:
-                    active_projects.append({
-                        "ProjectName": parts[0],
-                        "EmployeeRole": parts[1],
-                        "AllocationPercentage": int(float(parts[2])),
-                        "BillableStatus": parts[3],
-                        "ProjectEndDate": parts[4],
-                        "DaysRemaining": int(parts[5]),
-                        "ProjectHealth": parts[6]
-                    })
+        active_projects = active_projects_by_employee.get(
+            str(emp["EmployeeID"]),
+            []
+        )
 
         # Show the most urgent active project on the employee card.
         # The full project-wise timeline health is shown in the side panel.
         if active_projects:
             nearest_project = min(
                 active_projects,
-                key=lambda project: project.get("DaysRemaining", 999999)
+                key=lambda project: (
+                    project.get("DaysRemaining") is None,
+                    project.get("DaysRemaining")
+                    if project.get("DaysRemaining") is not None
+                    else 999999
+                )
             )
             emp["TimelineHealth"] = nearest_project["ProjectHealth"]
             emp["NearestProjectName"] = nearest_project["ProjectName"]
