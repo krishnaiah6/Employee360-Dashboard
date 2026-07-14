@@ -27,7 +27,7 @@ def make_json_safe(rows):
 
 def get_connection():
     return mysql.connector.connect(
-       host=os.environ.get("DB_HOST", "localhost"),
+        host=os.environ.get("DB_HOST", "localhost"),
         user=os.environ.get("DB_USER", "root"),
         password=os.environ.get("DB_PASSWORD", "your_mysql_password"),
         database=os.environ.get("DB_NAME", "your_database_name"),
@@ -309,10 +309,12 @@ def dashboard():
 
         if utilization == 0:
             emp["Status"] = "On Bench"
-        elif utilization > 100:
-            emp["Status"] = "Overallocated"
+        elif utilization < 100:
+            emp["Status"] = "Under Utilized"
+        elif utilization == 100:
+            emp["Status"] = "Utilized"
         else:
-            emp["Status"] = "Allocated"
+            emp["Status"] = "Over Utilized"
 
         name_parts = emp["EmployeeName"].split()
         emp["Initials"] = "".join([part[0] for part in name_parts[:2]]).upper()

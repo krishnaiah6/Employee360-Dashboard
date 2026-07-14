@@ -176,16 +176,21 @@ body{
     white-space:nowrap;
 }
 
-.allocated{
+.utilized{
     background:#198754;
     color:white;
 }
+.underutilized{
+    background:#fd7e14;
+    color:white;
+}
+
 
 .bench{
     background:#ffc107;
     color:black;
 }
-.overallocated{
+.overutilized{
     background:#dc3545;   
     color:white;
 }

@@ -73,7 +73,7 @@
     <div class="filter-block">
         <p class="filter-title">STATUS</p>
 
-      {% for s in ["All", "Allocated", "On Bench", "Overallocated"] %}
+      {% for s in ["All", "Utilized", "Under Utilized", "Over Utilized", "On Bench"] %}
         <button type="button"
                 class="chip {% if s == 'All' %}active{% endif %}"
                 onclick="setStatusFilter('{{ s }}', this)">
@@ -144,15 +144,17 @@
                         <p>{{ emp.Designation }}</p>
                     </div>
 
-                   <span class="status-badge
+                    <span class="status-badge
                     {% if emp.Status == 'On Bench' %}
                         bench
-                    {% elif emp.Status == 'Overallocated' %}
-                        overallocated
+                    {% elif emp.Status == 'Under Utilized' %}
+                        underutilized
+                    {% elif emp.Status == 'Over Utilized' %}
+                        overutilized
                     {% else %}
-                        allocated
+                        utilized
                     {% endif %}">
-                        {{ emp.Status }}
+                    {{ emp.Status }}
                     </span>
                 </div>
 
@@ -367,20 +369,11 @@ function filterEmployees() {
         .filter(skill => skill !== "");
 
     employees.forEach(employee => {
-        const searchText =
-            (employee.dataset.search || "").toLowerCase();
-
-        const status =
-            employee.dataset.status || "";
-
-        const department =
-            employee.dataset.department || "";
-
-        const skills =
-            (employee.dataset.skills || "").toLowerCase();
-
-        const categories =
-            (employee.dataset.categories || "").toLowerCase();
+        const searchText = (employee.dataset.search || "").toLowerCase();
+        const status = employee.dataset.status || "";
+        const department = employee.dataset.department || "";
+        const skills = (employee.dataset.skills || "").toLowerCase();
+        const categories = (employee.dataset.categories || "").toLowerCase();
 
         const employeeSkillsArray = skills
             .split(",")
@@ -412,16 +405,12 @@ function filterEmployees() {
             selectedDepartment === "All" ||
             department === selectedDepartment;
 
-        // Clicking a category shows employees who have at least
-        // one skill belonging to that category.
         const categoryMatch =
             selectedCategory === "All" ||
             employeeCategoriesArray.includes(
                 selectedCategory.toLowerCase()
             );
 
-        // Employees must possess all specifically selected skills.
-        // The selected skills may belong to different categories.
         const skillMatch =
             selectedSkills.length === 0 ||
             selectedSkills.every(selectedSkill =>
@@ -444,8 +433,7 @@ function filterEmployees() {
         }
     });
 
-    document.getElementById("visibleCount").innerText =
-        visibleCount;
+    document.getElementById("visibleCount").innerText = visibleCount;
 }
 
 function openEmployeePanel(card) {
