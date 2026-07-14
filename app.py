@@ -27,7 +27,7 @@ def make_json_safe(rows):
 
 def get_connection():
     return mysql.connector.connect(
-        host=os.environ.get("DB_HOST", "localhost"),
+       host=os.environ.get("DB_HOST", "localhost"),
         user=os.environ.get("DB_USER", "root"),
         password=os.environ.get("DB_PASSWORD", "your_mysql_password"),
         database=os.environ.get("DB_NAME", "your_database_name"),
@@ -155,7 +155,15 @@ def dashboard():
                         COALESCE(p.ProjectName, ''), '|',
                         COALESCE(p.EmployeeRole, ''), '|',
                         COALESCE(p.AllocationPercentage, 0), '|',
-                        COALESCE(p.BillableStatus, '')
+                        COALESCE(p.BillableStatus, ''), '|',
+                        COALESCE(DATE_FORMAT(p.ProjectEndDate, '%Y-%m-%d'), ''), '|',
+                        COALESCE(DATEDIFF(p.ProjectEndDate, CURDATE()), 0), '|',
+                        CASE
+                            WHEN p.ProjectEndDate < CURDATE() THEN 'Completed'
+                            WHEN DATEDIFF(p.ProjectEndDate, CURDATE()) <= 15 THEN 'Ending Soon'
+                            WHEN DATEDIFF(p.ProjectEndDate, CURDATE()) <= 30 THEN 'Attention'
+                            ELSE 'Healthy'
+                        END
                     )
                 END
                 SEPARATOR ';;'
@@ -297,13 +305,33 @@ def dashboard():
             for item in project_items:
                 parts = item.split("|")
 
-                if len(parts) == 4:
+                if len(parts) == 7:
                     active_projects.append({
                         "ProjectName": parts[0],
                         "EmployeeRole": parts[1],
                         "AllocationPercentage": int(float(parts[2])),
-                        "BillableStatus": parts[3]
+                        "BillableStatus": parts[3],
+                        "ProjectEndDate": parts[4],
+                        "DaysRemaining": int(parts[5]),
+                        "ProjectHealth": parts[6]
                     })
+
+        # Show the most urgent active project on the employee card.
+        # The full project-wise timeline health is shown in the side panel.
+        if active_projects:
+            nearest_project = min(
+                active_projects,
+                key=lambda project: project.get("DaysRemaining", 999999)
+            )
+            emp["TimelineHealth"] = nearest_project["ProjectHealth"]
+            emp["NearestProjectName"] = nearest_project["ProjectName"]
+            emp["NearestProjectEndDate"] = nearest_project["ProjectEndDate"]
+            emp["NearestProjectDaysRemaining"] = nearest_project["DaysRemaining"]
+        else:
+            emp["TimelineHealth"] = "No Active Project"
+            emp["NearestProjectName"] = ""
+            emp["NearestProjectEndDate"] = ""
+            emp["NearestProjectDaysRemaining"] = None
 
         emp["ActiveProjectList"] = active_projects
 
