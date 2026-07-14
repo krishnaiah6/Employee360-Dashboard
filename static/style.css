@@ -843,3 +843,139 @@ body{
 .selected-skill-chip:hover{
     background:#dc3545;
 }
+
+
+/* PROJECT TIMELINE HEALTH */
+.timeline-health-card{
+    margin:10px 0 4px;
+    padding:10px 12px;
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    background:#fafafa;
+}
+
+.timeline-health-card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    font-size:12px;
+    color:#667085;
+}
+
+.timeline-health-card-top strong{
+    font-size:12px;
+    white-space:nowrap;
+}
+
+.timeline-health-strip,
+.project-health-line{
+    width:100%;
+    height:6px;
+    margin:7px 0 6px;
+    border-radius:999px;
+    overflow:hidden;
+    background:#e5e7eb;
+}
+
+.timeline-health-strip::after,
+.project-health-fill{
+    content:"";
+    display:block;
+    width:100%;
+    height:100%;
+    border-radius:inherit;
+    background:#198754;
+}
+
+.timeline-health-card small{
+    display:block;
+    color:#667085;
+    font-size:11px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.health-healthy .timeline-health-strip::after,
+.project-health-line.health-healthy .project-health-fill{
+    background:#198754;
+}
+
+.health-attention .timeline-health-strip::after,
+.project-health-line.health-attention .project-health-fill{
+    background:#f0ad00;
+}
+
+.health-ending-soon .timeline-health-strip::after,
+.project-health-line.health-ending-soon .project-health-fill{
+    background:#dc3545;
+}
+
+.health-completed .timeline-health-strip::after,
+.project-health-line.health-completed .project-health-fill{
+    background:#667085;
+}
+
+.health-healthy strong{ color:#198754; }
+.health-attention strong{ color:#9a6700; }
+.health-ending-soon strong{ color:#b42318; }
+.health-completed strong{ color:#475467; }
+
+.allocation-project-health-row{
+    align-items:flex-start;
+}
+
+.allocation-project-health-row .allocation-project-left{
+    flex:1;
+    min-width:0;
+}
+
+.allocation-project-health-row .allocation-project-left > div{
+    width:100%;
+}
+
+.allocation-project-date{
+    margin:4px 0 0 !important;
+    font-size:12px !important;
+    color:#667085 !important;
+}
+
+.project-health-side{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:8px;
+    margin-left:12px;
+}
+
+.project-health-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+}
+
+.project-health-badge.health-healthy{
+    color:#087443;
+    background:#dcfce7;
+}
+
+.project-health-badge.health-attention{
+    color:#855a00;
+    background:#fff3cd;
+}
+
+.project-health-badge.health-ending-soon{
+    color:#a61b1b;
+    background:#fee2e2;
+}
+
+.project-health-badge.health-completed{
+    color:#475467;
+    background:#eaecf0;
+}
