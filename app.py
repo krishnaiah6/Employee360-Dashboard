@@ -630,7 +630,7 @@ def login():
             cursor.execute(
                 """
                 SELECT Email, password, Role
-                FROM `Login`
+                FROM `login`
                 WHERE LOWER(TRIM(Email)) = LOWER(TRIM(%s))
                 LIMIT 1
                 """,
