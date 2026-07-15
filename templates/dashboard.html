@@ -23,8 +23,21 @@
 
     <header>
         <div class="top-section">
-            <div>
-                <h1>Anblicks Resource Management</h1>
+            <div class="dashboard-title-section">
+                <div>
+                    <h1>Anblicks Resource Management</h1>
+
+                    <p class="logged-user">
+                        {{ session.get("user_email") }}
+                        <span>{{ session.get("role") }}</span>
+                    </p>
+                </div>
+
+                    <form action="{{ url_for('logout') }}" method="GET">
+                        <button type="submit" class="logout-btn">
+                            Logout
+                        </button>
+                    </form>
             </div>
 
             <div class="kpi-box">
@@ -206,13 +219,15 @@
 
                 <div class="timeline-health-card health-{{ emp.TimelineHealth|lower|replace(' ', '-') }}">
                     <div class="timeline-health-card-top">
-                        <span>Project Timeline Health</span>
+                        <span>Project Timeline</span>
                         <strong>{{ emp.TimelineHealth }}</strong>
                     </div>
                     <div class="timeline-health-strip"></div>
                     <small>
                         {{ emp.NearestProjectName }} ·
-                        {% if emp.NearestProjectDaysRemaining == 0 %}
+                        {% if emp.NearestProjectDaysRemaining is none %}
+                            end date not set
+                        {% elif emp.NearestProjectDaysRemaining == 0 %}
                             ends today
                         {% elif emp.NearestProjectDaysRemaining == 1 %}
                             1 day remaining
@@ -531,16 +546,28 @@ function openEmployeePanel(card) {
                 </div>
             `;
 
-            const daysRemaining = Number(project.DaysRemaining || 0);
-            let remainingText = `${daysRemaining} days remaining`;
+            const hasEndDate =
+                project.ProjectEndDate &&
+                project.DaysRemaining !== null &&
+                project.DaysRemaining !== undefined;
 
-            if (daysRemaining === 0) {
-                remainingText = "Ends today";
-            } else if (daysRemaining === 1) {
-                remainingText = "1 day remaining";
+            const daysRemaining = hasEndDate
+                ? Number(project.DaysRemaining)
+                : null;
+
+            let remainingText = "End date not set";
+
+            if (daysRemaining !== null) {
+                remainingText = `${daysRemaining} days remaining`;
+
+                if (daysRemaining === 0) {
+                    remainingText = "Ends today";
+                } else if (daysRemaining === 1) {
+                    remainingText = "1 day remaining";
+                }
             }
 
-            const healthClass = String(project.ProjectHealth || "Healthy")
+            const healthClass = String(project.ProjectHealth || "On Track")
                 .toLowerCase()
                 .replaceAll(" ", "-");
 
@@ -559,7 +586,7 @@ function openEmployeePanel(card) {
                     </div>
                     <div class="project-health-side">
                         <strong>${projectAllocation}%</strong>
-                        <span class="project-health-badge health-${healthClass}">${project.ProjectHealth || "Healthy"}</span>
+                        <span class="project-health-badge health-${healthClass}">${project.ProjectHealth || "On Track"}</span>
                     </div>
                 </div>
             `;

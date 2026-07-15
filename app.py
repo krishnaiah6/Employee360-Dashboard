@@ -1,10 +1,15 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import mysql.connector
 from decimal import Decimal
 from datetime import date, datetime
 import os
 
 app = Flask(__name__)
+
+app.secret_key = os.getenv("SECRET_KEY")
+
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY environment variable is not configured.")
 
 
 def make_json_safe(rows):
@@ -25,23 +30,52 @@ def make_json_safe(rows):
 
     return safe_rows
 
-def get_connection():
-    """Use local MySQL by default and Railway variables when deployed."""
-    return mysql.connector.connect(
-        host=os.environ.get("DB_HOST", "localhost"),
-        user=os.environ.get("DB_USER", "root"),
-        password=os.environ.get("DB_PASSWORD", "your_mysql_password"),
-        database=os.environ.get("DB_NAME", "your_database_name"),
-        port=int(os.environ.get("DB_PORT", 3306))
-    )
 
+def get_connection():
+    required_variables = [
+        "DB_HOST",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_NAME"
+    ]
+
+    missing_variables = [
+        variable
+        for variable in required_variables
+        if not os.getenv(variable)
+    ]
+
+    if missing_variables:
+        raise RuntimeError(
+            "Missing database environment variables: "
+            + ", ".join(missing_variables)
+        )
+
+    return mysql.connector.connect(
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT", "3306")),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        connection_timeout=20
+    )
 
 @app.route("/")
 def dashboard():
+    if "user_email" not in session:
+        return redirect(url_for("login"))
+
+    if session.get("role") not in ["RMG", "TA"]:
+        session.clear()
+        flash("You do not have permission to access the dashboard.", "error")
+        return redirect(url_for("login"))
+
     search = request.args.get("search", "")
     status = request.args.get("status", "All")
     department = request.args.get("department", "All")
     skill = request.args.get("skill", "")
+
+    # keep all your existing dashboard code below
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -563,7 +597,94 @@ def dashboard():
         bench_bucket_data=bench_bucket_data,
         total_records=len(filtered_employees)
     )
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    # On GET, an already authenticated RMG/TA user can return to the dashboard.
+    # On POST, always validate the newly submitted credentials. This prevents an
+    # existing session from making a wrong password appear to work.
+    if request.method == "GET" and "user_email" in session:
+        if session.get("role") in ["RMG", "TA"]:
+            return redirect(url_for("dashboard"))
+        session.clear()
 
+    email_value = ""
+
+    if request.method == "POST":
+        # Clear any previous login before checking the newly entered credentials.
+        session.clear()
+
+        email_value = request.form.get("email", "").strip()
+        entered_password = request.form.get("password", "")
+
+        if not email_value or not entered_password:
+            flash("Please enter both email and password.", "error")
+            return render_template("login.html", email_value=email_value)
+
+        conn = None
+        cursor = None
+
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            cursor.execute(
+                """
+                SELECT Email, password, Role
+                FROM `Login`
+                WHERE LOWER(TRIM(Email)) = LOWER(TRIM(%s))
+                LIMIT 1
+                """,
+                (email_value,)
+            )
+
+            user = cursor.fetchone()
+
+            if user is None:
+                flash("Email address not found.", "error")
+                return render_template("login.html", email_value=email_value)
+
+            stored_password = "" if user.get("password") is None else str(user["password"])
+
+            if entered_password != stored_password:
+                flash("Incorrect password.", "error")
+                return render_template("login.html", email_value=email_value)
+
+            role = "" if user.get("Role") is None else str(user["Role"]).strip().upper()
+
+            if role not in ["RMG", "TA"]:
+                flash("Only RMG and TA users can access this dashboard.", "error")
+                return render_template("login.html", email_value=email_value)
+
+            session["user_email"] = user["Email"]
+            session["role"] = role
+            session.permanent = request.form.get("remember") == "1"
+
+            return redirect(url_for("dashboard"))
+
+        except mysql.connector.Error as error:
+            print("Login database error:", error)
+            flash("Unable to connect to the database.", "error")
+            return render_template("login.html", email_value=email_value)
+
+        finally:
+            if cursor:
+                cursor.close()
+
+            if conn and conn.is_connected():
+                conn.close()
+
+    return render_template("login.html", email_value=email_value)
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    session.clear()
+    flash("You have been logged out successfully.", "success")
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        debug=False
+    )
