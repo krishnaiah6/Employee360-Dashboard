@@ -149,6 +149,7 @@ def dashboard():
         # scheduled archive event has not run yet for the day.
         active_project_condition = """
             LOWER(TRIM(ProjectStatus)) = 'in progress'
+            AND COALESCE(AllocationPercentage, 0) > 0
             AND (ProjectEndDate IS NULL OR ProjectEndDate >= CURDATE())
         """
 
