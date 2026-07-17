@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L&D Dashboard | Employee 360</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='lnd.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand-block">
+            <p>Employee 360</p>
+            <h1>L&amp;D Dashboard</h1>
+        </div>
+
+        <nav class="top-navigation" aria-label="L&D navigation">
+            <a href="{{ url_for('employee_dashboard') }}">My Profile</a>
+            <a class="active" href="{{ url_for('lnd_dashboard') }}">L&amp;D</a>
+            <a class="logout-link" href="{{ url_for('logout') }}">Logout</a>
+        </nav>
+    </header>
+
+    <main class="page-shell">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section class="page-heading">
+            <div>
+                <p class="section-label">Learning &amp; Development</p>
+                <h2>L&amp;D Overview</h2>
+                <p>
+                    Quick summary of employee skills, certifications,
+                    proficiency and pending approvals.
+                </p>
+            </div>
+        </section>
+
+        <section class="kpi-grid">
+            <article class="kpi-card">
+                <span class="kpi-icon">✓</span>
+                <div>
+                    <p>Total Certifications</p>
+                    <strong>{{ total_certifications }}</strong>
+                    <small>Certification records in LMS</small>
+                </div>
+            </article>
+
+            <article class="kpi-card">
+                <span class="kpi-icon">👥</span>
+                <div>
+                    <p>Certified Employees</p>
+                    <strong>{{ certified_employees }}</strong>
+                    <small>Out of {{ total_employees }} employees</small>
+                </div>
+            </article>
+
+            <article class="kpi-card">
+                <span class="kpi-icon">◆</span>
+                <div>
+                    <p>Total Skills</p>
+                    <strong>{{ total_skills }}</strong>
+                    <small>Distinct organizational skills</small>
+                </div>
+            </article>
+
+            <article class="kpi-card attention">
+                <span class="kpi-icon">!</span>
+                <div>
+                    <p>Pending Approvals</p>
+                    <strong>{{ pending_count }}</strong>
+                    <small>
+                        {{ skill_pending_count }} skills ·
+                        {{ certification_pending_count }} certifications
+                    </small>
+                </div>
+            </article>
+        </section>
+
+        <section class="analytics-grid">
+            <article class="dashboard-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Top Skills</h3>
+                        <p>Employees possessing each skill</p>
+                    </div>
+                </div>
+
+                {% if top_skills %}
+                    <div class="ranking-list">
+                        {% for item in top_skills %}
+                            <div class="ranking-row">
+                                <span class="ranking-position">{{ loop.index }}</span>
+                                <div class="ranking-content">
+                                    <div class="ranking-header">
+                                        <strong>{{ item.SkillName }}</strong>
+                                        <span>{{ item.EmployeeCount }}</span>
+                                    </div>
+                                    <div class="ranking-track">
+                                        <div
+                                            class="ranking-fill"
+                                            style="--bar-width: {{ item.BarPercent }}%;"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">No skills are currently available.</div>
+                {% endif %}
+            </article>
+
+            <article class="dashboard-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Top Certifications</h3>
+                        <p>Employees holding each certification</p>
+                    </div>
+                </div>
+
+                {% if top_certifications %}
+                    <div class="ranking-list">
+                        {% for item in top_certifications %}
+                            <div class="ranking-row">
+                                <span class="ranking-position">{{ loop.index }}</span>
+                                <div class="ranking-content">
+                                    <div class="ranking-header">
+                                        <strong>{{ item.CertificationName }}</strong>
+                                        <span>{{ item.EmployeeCount }}</span>
+                                    </div>
+                                    <div class="ranking-track">
+                                        <div
+                                            class="ranking-fill certification-fill"
+                                            style="--bar-width: {{ item.BarPercent }}%;"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        No certifications are currently available.
+                    </div>
+                {% endif %}
+            </article>
+
+            <article class="dashboard-panel certification-summary">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Certification Summary</h3>
+                        <p>Current LMS status distribution</p>
+                    </div>
+                </div>
+
+                <div class="summary-stat completed">
+                    <span>Completed / Active</span>
+                    <strong>{{ certification_summary.CompletedCount }}</strong>
+                </div>
+
+                <div class="summary-stat pending">
+                    <span>Pending</span>
+                    <strong>{{ certification_summary.PendingCount }}</strong>
+                </div>
+
+                <div class="summary-stat expired">
+                    <span>Expired / Inactive</span>
+                    <strong>{{ certification_summary.ExpiredCount }}</strong>
+                </div>
+            </article>
+        </section>
+
+        <section class="lower-grid">
+            <article class="dashboard-panel proficiency-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Count of People by Skill</h3>
+                        <p>Employee distribution by proficiency level</p>
+                    </div>
+                </div>
+
+                {% if skill_proficiency_data %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Skill</th>
+                                    <th>Beginner</th>
+                                    <th>Intermediate</th>
+                                    <th>Advanced</th>
+                                    <th>Expert</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in skill_proficiency_data %}
+                                    <tr>
+                                        <td><strong>{{ item.SkillName }}</strong></td>
+                                        <td>{{ item.BeginnerCount }}</td>
+                                        <td>{{ item.IntermediateCount }}</td>
+                                        <td>{{ item.AdvancedCount }}</td>
+                                        <td>{{ item.ExpertCount }}</td>
+                                        <td><strong>{{ item.TotalCount }}</strong></td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">No proficiency data is available.</div>
+                {% endif %}
+            </article>
+
+            <aside class="request-kpi-column">
+                <button
+                    type="button"
+                    class="request-kpi skill-request-kpi"
+                    onclick="openRequestModal('skillRequestModal')"
+                >
+                    <span>Skill Requests</span>
+                    <strong>{{ skill_pending_count }}</strong>
+                    <small>Pending requests</small>
+                    <b>View Requests →</b>
+                </button>
+
+                <button
+                    type="button"
+                    class="request-kpi certification-request-kpi"
+                    onclick="openRequestModal('certificationRequestModal')"
+                >
+                    <span>Certification Requests</span>
+                    <strong>{{ certification_pending_count }}</strong>
+                    <small>Pending requests</small>
+                    <b>View Requests →</b>
+                </button>
+            </aside>
+        </section>
+    </main>
+
+    <div
+        id="skillRequestModal"
+        class="request-modal"
+        aria-hidden="true"
+        onclick="closeRequestModalOnBackdrop(event, 'skillRequestModal')"
+    >
+        <div class="request-modal-dialog" role="dialog" aria-modal="true">
+            <div class="request-modal-header">
+                <div>
+                    <h3>Employee Skill Requests</h3>
+                    <p>Approve or reject submitted skill requests</p>
+                </div>
+                <button
+                    type="button"
+                    class="modal-close"
+                    onclick="closeRequestModal('skillRequestModal')"
+                    aria-label="Close"
+                >
+                    &times;
+                </button>
+            </div>
+
+            <div class="request-modal-body">
+                {% if requests_data %}
+                    <div class="request-list">
+                        {% for item in requests_data %}
+                            <article class="request-card">
+                                <div class="request-main">
+                                    <div class="employee-line">
+                                        <strong>{{ item.EmployeeName or item.EmployeeID }}</strong>
+                                        <span>
+                                            {{ item.EmployeeID }} ·
+                                            {{ item.Department or 'Department N/A' }}
+                                        </span>
+                                    </div>
+
+                                    <h4>{{ item.SkillName }}</h4>
+                                    <p>
+                                        {{ item.SkillLevel or 'Level N/A' }} ·
+                                        {{ item.CategoryName or 'Category N/A' }}
+                                    </p>
+                                    <small>Requested: {{ item.RequestedAt or 'N/A' }}</small>
+
+                                    {% if item.RequestStatus == 'Rejected' and item.RejectionReason %}
+                                        <small class="reason">
+                                            Reason: {{ item.RejectionReason }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+
+                                <div class="request-side">
+                                    <span class="status {{ item.RequestStatus|lower }}">
+                                        {{ item.RequestStatus }}
+                                    </span>
+
+                                    {% if item.RequestStatus == 'Pending' %}
+                                        <form
+                                            action="{{ url_for('approve_skill_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                        >
+                                            <button class="approve-btn" type="submit">
+                                                Approve
+                                            </button>
+                                        </form>
+
+                                        <form
+                                            action="{{ url_for('reject_skill_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                            class="reject-form"
+                                        >
+                                            <input
+                                                type="text"
+                                                name="rejection_reason"
+                                                placeholder="Reason for rejection"
+                                                required
+                                            >
+                                            <button class="reject-btn" type="submit">
+                                                Reject
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <small>
+                                            Reviewed by {{ item.ReviewedBy or 'L&D' }}
+                                            {% if item.ReviewedAt %}
+                                                on {{ item.ReviewedAt }}
+                                            {% endif %}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">No skill requests are available.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div
+        id="certificationRequestModal"
+        class="request-modal"
+        aria-hidden="true"
+        onclick="closeRequestModalOnBackdrop(event, 'certificationRequestModal')"
+    >
+        <div class="request-modal-dialog" role="dialog" aria-modal="true">
+            <div class="request-modal-header">
+                <div>
+                    <h3>Certification Requests</h3>
+                    <p>Review proof before approving certifications</p>
+                </div>
+                <button
+                    type="button"
+                    class="modal-close"
+                    onclick="closeRequestModal('certificationRequestModal')"
+                    aria-label="Close"
+                >
+                    &times;
+                </button>
+            </div>
+
+            <div class="request-modal-body">
+                {% if certification_requests_data %}
+                    <div class="request-list">
+                        {% for item in certification_requests_data %}
+                            <article class="request-card">
+                                <div class="request-main">
+                                    <div class="employee-line">
+                                        <strong>{{ item.EmployeeName or item.EmployeeID }}</strong>
+                                        <span>
+                                            {{ item.EmployeeID }} ·
+                                            {{ item.Department or 'Department N/A' }}
+                                        </span>
+                                    </div>
+
+                                    <h4>{{ item.CertificationName }}</h4>
+                                    <small>Requested: {{ item.RequestedAt or 'N/A' }}</small>
+
+                                    <div class="proof-actions">
+                                        {% if item.CertificateLink %}
+                                            <a
+                                                href="{{ item.CertificateLink }}"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                Open verification link
+                                            </a>
+                                        {% endif %}
+
+                                        {% if item.OriginalFileName %}
+                                            <a
+                                                href="{{ url_for('view_certificate_attachment', request_id=item.RequestID) }}"
+                                                target="_blank"
+                                            >
+                                                View attachment
+                                            </a>
+                                        {% endif %}
+                                    </div>
+
+                                    {% if item.RequestStatus == 'Rejected' and item.RejectionReason %}
+                                        <small class="reason">
+                                            Reason: {{ item.RejectionReason }}
+                                        </small>
+                                    {% endif %}
+                                </div>
+
+                                <div class="request-side">
+                                    <span class="status {{ item.RequestStatus|lower }}">
+                                        {{ item.RequestStatus }}
+                                    </span>
+
+                                    {% if item.RequestStatus == 'Pending' %}
+                                        <form
+                                            action="{{ url_for('approve_certification_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                        >
+                                            <button class="approve-btn" type="submit">
+                                                Approve
+                                            </button>
+                                        </form>
+
+                                        <form
+                                            action="{{ url_for('reject_certification_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                            class="reject-form"
+                                        >
+                                            <input
+                                                type="text"
+                                                name="rejection_reason"
+                                                placeholder="Reason for rejection"
+                                                required
+                                            >
+                                            <button class="reject-btn" type="submit">
+                                                Reject
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <small>
+                                            Reviewed by {{ item.ReviewedBy or 'L&D' }}
+                                            {% if item.ReviewedAt %}
+                                                on {{ item.ReviewedAt }}
+                                            {% endif %}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        No certification requests are available.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openRequestModal(modalId) {
+            const modal = document.getElementById(modalId);
+
+            if (!modal) {
+                return;
+            }
+
+            modal.classList.add("show");
+            modal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
+        }
+
+        function closeRequestModal(modalId) {
+            const modal = document.getElementById(modalId);
+
+            if (!modal) {
+                return;
+            }
+
+            modal.classList.remove("show");
+            modal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+        }
+
+        function closeRequestModalOnBackdrop(event, modalId) {
+            if (event.target.id === modalId) {
+                closeRequestModal(modalId);
+            }
+        }
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape") {
+                return;
+            }
+
+            document.querySelectorAll(".request-modal.show").forEach(function (modal) {
+                closeRequestModal(modal.id);
+            });
+        });
+    </script>
+</body>
+</html>
