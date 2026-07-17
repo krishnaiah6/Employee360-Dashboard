@@ -838,3 +838,30 @@ body.modal-open {
         flex-wrap: wrap;
     }
 }
+/* Scroll for Learning & Certifications panel */
+.learning-certification-panel {
+    max-height: 650px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 16px;
+    scrollbar-gutter: stable;
+}
+
+/* Custom scrollbar */
+.learning-certification-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.learning-certification-panel::-webkit-scrollbar-track {
+    background: #f4eee7;
+    border-radius: 10px;
+}
+
+.learning-certification-panel::-webkit-scrollbar-thumb {
+    background: #b7a791;
+    border-radius: 10px;
+}
+
+.learning-certification-panel::-webkit-scrollbar-thumb:hover {
+    background: #8a7e6a;
+}
