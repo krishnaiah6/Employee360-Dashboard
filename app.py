@@ -1306,7 +1306,6 @@ def lnd_dashboard():
               AND TRIM(SkillName) != ''
             GROUP BY LOWER(TRIM(SkillName))
             ORDER BY TotalCount DESC, SkillName
-            LIMIT 12
         """)
         skill_proficiency_data = cursor.fetchall()
 
