@@ -505,12 +505,35 @@ def dashboard():
             break
 
     if bench_date_column:
-        bench_days_sql = f"DATEDIFF(CURDATE(), MAX(p.{bench_date_column}))"
-        bench_date_sql = f"MAX(p.{bench_date_column})"
+        # Use only dates that are today or in the past.
+        # Future project end dates must not be used as bench start dates.
+        bench_date_sql = f"""
+            MAX(
+                CASE
+                    WHEN p.{bench_date_column} IS NOT NULL
+                        AND p.{bench_date_column} <= CURDATE()
+                    THEN p.{bench_date_column}
+                    ELSE NULL
+                END
+            )
+        """
+
+        bench_days_sql = f"""
+            DATEDIFF(
+                CURDATE(),
+                MAX(
+                    CASE
+                        WHEN p.{bench_date_column} IS NOT NULL
+                            AND p.{bench_date_column} <= CURDATE()
+                        THEN p.{bench_date_column}
+                        ELSE NULL
+                    END
+                )
+            )
+        """
     else:
         bench_days_sql = "NULL"
         bench_date_sql = "NULL"
-
     cursor.execute(f"""
         SELECT
             h.EmployeeID,
@@ -561,13 +584,15 @@ def dashboard():
 
         if bench_days is None:
             bench_emp["BenchBucket"] = "Not Available"
-        elif bench_days <= 30:
+        elif 0 <= bench_days <= 30:
             bench_emp["BenchBucket"] = "0-30 days"
-        elif bench_days <= 60:
+        elif 31 <= bench_days <= 60:
             bench_emp["BenchBucket"] = "31-60 days"
-        else:
+        elif bench_days > 60:
             bench_emp["BenchBucket"] = "60+ days"
-
+        else:
+            bench_emp["BenchDays"] = None
+            bench_emp["BenchBucket"] = "Not Available"
         bench_bucket_data[bench_emp["BenchBucket"]] += 1
 
     employee_drill_data = make_json_safe(employee_drill_data)
