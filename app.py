@@ -580,43 +580,47 @@ def dashboard():
                 h.EmployeeName,
                 h.Department,
                 h.Designation,
+                history.LastCompletedEndDate AS BenchStartDate,
                 CASE
-                    WHEN COALESCE(a.ActiveProjectCount, 0) = 0
-                         AND history.LastCompletedEndDate IS NOT NULL
-                         AND history.LastCompletedEndDate <= CURDATE()
-                    THEN history.LastCompletedEndDate
-                    ELSE NULL
-                END AS BenchStartDate,
-                CASE
-                    WHEN COALESCE(a.ActiveProjectCount, 0) = 0
-                         AND history.LastCompletedEndDate IS NOT NULL
-                         AND history.LastCompletedEndDate <= CURDATE()
-                    THEN DATEDIFF(CURDATE(), history.LastCompletedEndDate)
+                    WHEN history.LastCompletedEndDate IS NOT NULL
+                        AND history.LastCompletedEndDate <= CURDATE()
+                    THEN GREATEST(
+                        DATEDIFF(CURDATE(), history.LastCompletedEndDate),
+                        0
+                    )
                     ELSE NULL
                 END AS BenchDays
             FROM hrms_data h
+
             LEFT JOIN (
                 SELECT
                     EmployeeID,
-                    COUNT(*) AS ActiveProjectCount,
                     SUM(COALESCE(AllocationPercentage, 0)) AS TotalAllocation
                 FROM project_management
                 WHERE {active_project_condition}
                 GROUP BY EmployeeID
-            ) a ON h.EmployeeID = a.EmployeeID
+            ) active_projects
+                ON TRIM(h.EmployeeID) = TRIM(active_projects.EmployeeID)
+
             LEFT JOIN (
-                SELECT EmployeeID, MAX(EndDate) AS LastCompletedEndDate
+                SELECT
+                    TRIM(EmployeeID) AS EmployeeID,
+                    MAX(EndDate) AS LastCompletedEndDate
                 FROM project_history
                 WHERE EndDate IS NOT NULL
-                  AND EndDate <= CURDATE()
-                GROUP BY EmployeeID
-            ) history ON h.EmployeeID = history.EmployeeID
-            WHERE COALESCE(a.TotalAllocation, 0) = 0
+                AND EndDate <= CURDATE()
+                GROUP BY TRIM(EmployeeID)
+            ) history
+                ON TRIM(h.EmployeeID) = history.EmployeeID
+
+            WHERE COALESCE(active_projects.TotalAllocation, 0) = 0
+
             ORDER BY
                 BenchDays IS NULL,
                 BenchDays DESC,
                 h.EmployeeName ASC
         """)
+
         bench_drill_data = cursor.fetchall()
 
         bench_bucket_data = {
