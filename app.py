@@ -100,7 +100,7 @@ def get_connection():
                 "host": os.getenv("LOCAL_DB_HOST", "localhost"),
                 "port": int(os.getenv("LOCAL_DB_PORT", "3306")),
                 "user": os.getenv("LOCAL_DB_USER", "root"),
-                "password": os.getenv("LOCAL_DB_PASSWORD", ""),
+                "password": os.getenv("LOCAL_DB_PASSWORD", "your_actual_mysql_password"),
                 "database": os.getenv("LOCAL_DB_NAME", "employee360_test"),
             }
         else:
@@ -109,7 +109,7 @@ def get_connection():
                 "DB_USER, DB_PASSWORD and DB_NAME."
             )
 
-    missing = [key for key in ("host", "user", "password", "database") if not config.get(key)]
+    missing = [key for key in ("host", "user", "database") if not config.get(key)]
     if missing:
         raise RuntimeError("Missing database configuration: " + ", ".join(missing))
 
@@ -683,6 +683,106 @@ def dashboard():
             conn.close()
 
 
+def get_login_stats():
+    conn = None
+    cursor = None
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Total employees
+        cursor.execute("""
+            SELECT COUNT(*) AS total
+            FROM hrms_data
+        """)
+        headcount = cursor.fetchone()["total"] or 0
+
+        # Average utilization
+        cursor.execute("""
+            SELECT ROUND(AVG(TotalAllocation), 2) AS avg_utilization
+            FROM (
+                SELECT
+                    h.EmployeeID,
+                    COALESCE(a.TotalAllocation, 0) AS TotalAllocation
+                FROM hrms_data h
+                LEFT JOIN (
+                    SELECT
+                        EmployeeID,
+                        SUM(COALESCE(AllocationPercentage, 0)) AS TotalAllocation
+                    FROM project_management
+                    WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
+                      AND COALESCE(AllocationPercentage, 0) > 0
+                      AND (
+                          ProjectEndDate IS NULL
+                          OR ProjectEndDate >= CURDATE()
+                      )
+                    GROUP BY EmployeeID
+                ) a
+                ON h.EmployeeID = a.EmployeeID
+            ) employee_utilization
+        """)
+
+        avg_utilization = cursor.fetchone()["avg_utilization"] or 0
+
+        # On bench employees
+        cursor.execute("""
+            SELECT COUNT(*) AS bench_count
+            FROM hrms_data h
+            LEFT JOIN (
+                SELECT
+                    EmployeeID,
+                    SUM(COALESCE(AllocationPercentage, 0)) AS TotalAllocation
+                FROM project_management
+                WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
+                  AND COALESCE(AllocationPercentage, 0) > 0
+                  AND (
+                      ProjectEndDate IS NULL
+                      OR ProjectEndDate >= CURDATE()
+                  )
+                GROUP BY EmployeeID
+            ) a
+            ON h.EmployeeID = a.EmployeeID
+            WHERE COALESCE(a.TotalAllocation, 0) = 0
+        """)
+
+        bench_count = cursor.fetchone()["bench_count"] or 0
+
+        return {
+            "headcount": headcount,
+            "bench_count": bench_count,
+            "avg_utilization": avg_utilization
+        }
+
+    except Exception as error:
+        print("Login stats database error:", error)
+
+        return {
+            "headcount": 0,
+            "bench_count": 0,
+            "avg_utilization": 0
+        }
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def render_login_page(email_value=""):
+    stats = get_login_stats()
+
+    return render_template(
+        "login.html",
+        email_value=email_value,
+        headcount=stats["headcount"],
+        bench_count=stats["bench_count"],
+        avg_utilization=stats["avg_utilization"]
+    )
+    
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     # On GET, an already authenticated RMG/TA user can return to the dashboard.
@@ -708,8 +808,7 @@ def login():
 
         if not email_value or not entered_password:
             flash("Please enter both email and password.", "error")
-            return render_template("login.html", email_value=email_value)
-
+            return render_login_page(email_value)
         conn = None
         cursor = None
 
@@ -731,19 +830,19 @@ def login():
 
             if user is None:
                 flash("Email address not found.", "error")
-                return render_template("login.html", email_value=email_value)
+                return render_login_page(email_value)
 
             stored_password = "" if user.get("password") is None else str(user["password"])
 
             if entered_password != stored_password:
                 flash("Incorrect password.", "error")
-                return render_template("login.html", email_value=email_value)
+                return render_login_page(email_value)
 
             role = "" if user.get("Role") is None else str(user["Role"]).strip().upper()
 
             if role not in ["RMG", "TA", "EMPLOYEE", "L&D", "LND"]:
                 flash("Your role does not currently have an assigned page.", "error")
-                return render_template("login.html", email_value=email_value)
+                return render_login_page(email_value)
 
             session["user_email"] = user["Email"]
             session["role"] = role
@@ -760,8 +859,7 @@ def login():
         except mysql.connector.Error as error:
             print("Login database error:", error)
             flash("Unable to connect to the database.", "error")
-            return render_template("login.html", email_value=email_value)
-
+            return render_login_page(email_value)
         finally:
             if cursor:
                 cursor.close()
@@ -769,7 +867,7 @@ def login():
             if conn and conn.is_connected():
                 conn.close()
 
-    return render_template("login.html", email_value=email_value)
+    return render_login_page(email_value)
 
 
 
