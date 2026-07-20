@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment variables and credentials
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Runtime files
+*.log
+uploads/certificates/*
+!uploads/certificates/.gitkeep
+
+# Local exports and temporary files
+*.csv
+*.xlsx
+*.zip
