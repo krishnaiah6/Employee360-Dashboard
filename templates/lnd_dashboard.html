@@ -68,7 +68,12 @@
                 </div>
             </article>
 
-            <article class="kpi-card attention">
+            <button
+                type="button"
+                class="kpi-card attention pending-approvals-kpi"
+                onclick="openRequestModal('pendingApprovalsModal')"
+                aria-haspopup="dialog"
+            >
                 <span class="kpi-icon">!</span>
                 <div>
                     <p>Pending Approvals</p>
@@ -77,8 +82,9 @@
                         {{ skill_pending_count }} skills ·
                         {{ certification_pending_count }} certifications
                     </small>
+                    <b>View all pending approvals →</b>
                 </div>
-            </article>
+            </button>
         </section>
 
         <section class="analytics-grid">
@@ -241,6 +247,159 @@
             </aside>
         </section>
     </main>
+
+    <div
+        id="pendingApprovalsModal"
+        class="request-modal"
+        aria-hidden="true"
+        onclick="closeRequestModalOnBackdrop(event, 'pendingApprovalsModal')"
+    >
+        <div
+            class="request-modal-dialog pending-approvals-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pendingApprovalsTitle"
+        >
+            <div class="request-modal-header pending-modal-header">
+                <div>
+                    <h3 id="pendingApprovalsTitle">Pending Approvals</h3>
+                    <p>
+                        {{ skill_pending_count }} skill requests and
+                        {{ certification_pending_count }} certification requests
+                        awaiting review
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="modal-close"
+                    onclick="closeRequestModal('pendingApprovalsModal')"
+                    aria-label="Close pending approvals"
+                >
+                    &times;
+                </button>
+            </div>
+
+            <div class="request-modal-body">
+                {% if pending_count > 0 %}
+                    <div class="pending-approval-list">
+                        {% for item in requests_data %}
+                            {% if item.RequestStatus == 'Pending' %}
+                                <article class="pending-approval-row">
+                                    <div class="pending-request-type skill-type">Skill</div>
+
+                                    <div class="pending-request-details">
+                                        <strong>{{ item.SkillName }}</strong>
+                                        <span>
+                                            {{ item.EmployeeName or item.EmployeeID }} ·
+                                            {{ item.EmployeeID }}
+                                        </span>
+                                        <small>
+                                            {{ item.SkillLevel or 'Level N/A' }} ·
+                                            {{ item.CategoryName or 'Category N/A' }} ·
+                                            Requested {{ item.RequestedAt or 'N/A' }}
+                                        </small>
+                                    </div>
+
+                                    <div class="pending-request-actions">
+                                        <form
+                                            action="{{ url_for('approve_skill_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                        >
+                                            <button class="approve-btn" type="submit">Approve</button>
+                                        </form>
+
+                                        <form
+                                            action="{{ url_for('reject_skill_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                            class="pending-reject-form"
+                                        >
+                                            <input
+                                                type="text"
+                                                name="rejection_reason"
+                                                placeholder="Rejection reason"
+                                                aria-label="Reason for rejecting {{ item.SkillName }}"
+                                                required
+                                            >
+                                            <button class="reject-btn" type="submit">Reject</button>
+                                        </form>
+                                    </div>
+                                </article>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% for item in certification_requests_data %}
+                            {% if item.RequestStatus == 'Pending' %}
+                                <article class="pending-approval-row">
+                                    <div class="pending-request-type certification-type">
+                                        Certification
+                                    </div>
+
+                                    <div class="pending-request-details">
+                                        <strong>{{ item.CertificationName }}</strong>
+                                        <span>
+                                            {{ item.EmployeeName or item.EmployeeID }} ·
+                                            {{ item.EmployeeID }}
+                                        </span>
+                                        <small>Requested {{ item.RequestedAt or 'N/A' }}</small>
+
+                                        <div class="proof-actions">
+                                            {% if item.CertificateLink %}
+                                                <a
+                                                    href="{{ item.CertificateLink }}"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    Open verification link
+                                                </a>
+                                            {% endif %}
+
+                                            {% if item.OriginalFileName %}
+                                                <a
+                                                    href="{{ url_for('view_certificate_attachment', request_id=item.RequestID) }}"
+                                                    target="_blank"
+                                                >
+                                                    View attachment
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="pending-request-actions">
+                                        <form
+                                            action="{{ url_for('approve_certification_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                        >
+                                            <button class="approve-btn" type="submit">Approve</button>
+                                        </form>
+
+                                        <form
+                                            action="{{ url_for('reject_certification_request', request_id=item.RequestID) }}"
+                                            method="POST"
+                                            class="pending-reject-form"
+                                        >
+                                            <input
+                                                type="text"
+                                                name="rejection_reason"
+                                                placeholder="Rejection reason"
+                                                aria-label="Reason for rejecting {{ item.CertificationName }}"
+                                                required
+                                            >
+                                            <button class="reject-btn" type="submit">Reject</button>
+                                        </form>
+                                    </div>
+                                </article>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state pending-empty-state">
+                        <strong>All caught up!</strong>
+                        <span>There are no pending approvals right now.</span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 
     <div
         id="skillRequestModal"

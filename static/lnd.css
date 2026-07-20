@@ -145,6 +145,33 @@ body.modal-open {
     border-radius: 13px;
 }
 
+.pending-approvals-kpi {
+    width: 100%;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pending-approvals-kpi:hover {
+    transform: translateY(-3px);
+    border-color: #e2bd7a;
+    box-shadow: 0 14px 30px rgba(56, 45, 35, 0.14);
+}
+
+.pending-approvals-kpi:focus-visible {
+    outline: 3px solid rgba(184, 121, 24, 0.28);
+    outline-offset: 3px;
+}
+
+.pending-approvals-kpi b {
+    display: block;
+    margin-top: 8px;
+    color: var(--orange);
+    font-size: 11px;
+}
+
 .kpi-icon {
     display: grid;
     place-items: center;
@@ -506,6 +533,107 @@ tbody tr:hover {
     padding: 18px 20px 22px;
 }
 
+/* Combined pending approvals popup */
+.pending-approvals-dialog {
+    width: min(1100px, 96vw);
+}
+
+.pending-modal-header {
+    border-bottom-color: #ead8ba;
+    background: #fff9ef;
+}
+
+.pending-approval-list {
+    display: grid;
+    gap: 11px;
+}
+
+.pending-approval-row {
+    display: grid;
+    grid-template-columns: 105px minmax(0, 1fr) minmax(255px, 315px);
+    gap: 16px;
+    align-items: start;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: #ffffff;
+}
+
+.pending-request-type {
+    justify-self: start;
+    padding: 6px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-align: center;
+}
+
+.skill-type {
+    color: #285da7;
+    background: #eaf2ff;
+}
+
+.certification-type {
+    color: #187044;
+    background: #eaf8ef;
+}
+
+.pending-request-details strong,
+.pending-request-details span,
+.pending-request-details small {
+    display: block;
+}
+
+.pending-request-details strong {
+    margin-bottom: 4px;
+    color: #43382f;
+    font-size: 15px;
+}
+
+.pending-request-details span {
+    margin-bottom: 4px;
+    color: #554b43;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pending-request-details small {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.pending-request-actions {
+    display: grid;
+    gap: 8px;
+}
+
+.pending-reject-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+}
+
+.pending-reject-form input {
+    min-width: 0;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12px;
+}
+
+.pending-empty-state strong,
+.pending-empty-state span {
+    display: block;
+}
+
+.pending-empty-state strong {
+    margin-bottom: 5px;
+    color: var(--green);
+    font-size: 17px;
+}
+
 .request-list {
     display: grid;
     gap: 12px;
@@ -678,6 +806,15 @@ tbody tr:hover {
 
     .request-card {
         grid-template-columns: 1fr;
+    }
+
+    .pending-approval-row {
+        grid-template-columns: 1fr;
+    }
+
+    .pending-request-actions {
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
     }
 
     .status {
