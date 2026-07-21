@@ -120,6 +120,128 @@ def get_connection():
         charset="utf8mb4",
         use_unicode=True,
     )
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, abort
+import mysql.connector
+from decimal import Decimal
+from datetime import date, datetime
+import os
+import uuid
+from urllib.parse import urlparse, unquote
+from werkzeug.utils import secure_filename
+
+app = Flask(__name__)
+
+# Always set a strong SECRET_KEY in Render. The fallback is only for local development.
+app.secret_key = os.getenv("SECRET_KEY", "local-development-secret-key")
+
+# Render terminates HTTPS before forwarding requests to Flask. These settings keep
+# session cookies secure in production while still allowing localhost development.
+is_production = os.getenv("RENDER", "").lower() == "true" or os.getenv("FLASK_ENV") == "production"
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=is_production,
+)
+
+CERTIFICATE_UPLOAD_FOLDER = os.getenv(
+    "CERTIFICATE_UPLOAD_FOLDER",
+    os.path.join(app.root_path, "uploads", "certificates"),
+)
+ALLOWED_CERTIFICATE_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
+MAX_CERTIFICATE_FILE_SIZE = 5 * 1024 * 1024
+
+app.config["MAX_CONTENT_LENGTH"] = MAX_CERTIFICATE_FILE_SIZE
+os.makedirs(CERTIFICATE_UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_certificate_file(filename):
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_CERTIFICATE_EXTENSIONS
+    )
+
+def is_valid_http_url(value):
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    except ValueError:
+        return False
+
+def make_json_safe(rows):
+    safe_rows = []
+
+    for row in rows:
+        safe_row = {}
+
+        for key, value in row.items():
+            if isinstance(value, Decimal):
+                safe_row[key] = float(value)
+            elif isinstance(value, (date, datetime)):
+                safe_row[key] = value.strftime("%Y-%m-%d")
+            else:
+                safe_row[key] = value
+
+        safe_rows.append(safe_row)
+
+    return safe_rows
+
+def get_connection():
+    """Connect to Railway on Render and local MySQL during development.
+
+    On Render, use the DB_HOST, DB_PORT, DB_USER, DB_PASSWORD and DB_NAME
+    environment variables. DATABASE_URL/MYSQL_URL are also supported.
+    """
+    is_render = os.getenv("RENDER", "").lower() == "true"
+
+    # Prefer the explicit DB_* variables configured in Render.
+    explicit_host = os.getenv("DB_HOST")
+    if explicit_host:
+        config = {
+            "host": explicit_host,
+            "port": int(os.getenv("DB_PORT", "3306")),
+            "user": os.getenv("DB_USER", "root"),
+            "password": os.getenv("DB_PASSWORD", ""),
+            "database": os.getenv("DB_NAME", "railway"),
+        }
+    else:
+        database_url = os.getenv("DATABASE_URL") or os.getenv("MYSQL_PUBLIC_URL") or os.getenv("MYSQL_URL")
+
+        if database_url:
+            parsed = urlparse(database_url)
+            if parsed.scheme not in {"mysql", "mysql2"}:
+                raise ValueError("Database URL must use the mysql:// scheme")
+
+            config = {
+                "host": parsed.hostname,
+                "port": parsed.port or 3306,
+                "user": unquote(parsed.username or ""),
+                "password": unquote(parsed.password or ""),
+                "database": unquote(parsed.path.lstrip("/")) or "railway",
+            }
+        elif not is_render:
+            config = {
+                "host": os.getenv("LOCAL_DB_HOST", "localhost"),
+                "port": int(os.getenv("LOCAL_DB_PORT", "3306")),
+                "user": os.getenv("LOCAL_DB_USER", "root"),
+                "password": os.getenv("LOCAL_DB_PASSWORD", "your_actual_mysql_password"),
+                "database": os.getenv("LOCAL_DB_NAME", "employee360_test"),
+            }
+        else:
+            raise RuntimeError(
+                "Render database variables are missing. Add DB_HOST, DB_PORT, "
+                "DB_USER, DB_PASSWORD and DB_NAME."
+            )
+
+    missing = [key for key in ("host", "user", "database") if not config.get(key)]
+    if missing:
+        raise RuntimeError("Missing database configuration: " + ", ".join(missing))
+
+    return mysql.connector.connect(
+        **config,
+        connection_timeout=20,
+        autocommit=False,
+        charset="utf8mb4",
+        use_unicode=True,
+    )
 
 
 @app.route("/")
@@ -526,9 +648,23 @@ def dashboard():
         # KPI DRILL-DOWN DATA
         # -------------------------------------------------------------
         cursor.execute("""
-            SELECT EmployeeID, EmployeeName, Department, Designation
+            SELECT
+                EmployeeID,
+                EmployeeName,
+                Department,
+                Designation,
+                TotalExperience
             FROM hrms_data
-            ORDER BY Department ASC, EmployeeID ASC
+            ORDER BY
+                CASE
+                    WHEN TotalExperience IS NULL THEN 5
+                    WHEN TotalExperience <= 3 THEN 1
+                    WHEN TotalExperience <= 6 THEN 2
+                    WHEN TotalExperience <= 12 THEN 3
+                    ELSE 4
+                END,
+                TotalExperience ASC,
+                EmployeeID ASC
         """)
         employee_drill_data = cursor.fetchall()
 
@@ -2005,3 +2141,4 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=os.getenv("FLASK_DEBUG", "false").lower() == "true",
     )
+

@@ -705,6 +705,42 @@ body{
     color:#344054;
 }
 
+.experience-group-grid{
+    display:grid;
+    grid-template-columns:repeat(4, minmax(130px, 1fr));
+    gap:12px;
+    margin-bottom:20px;
+}
+
+.experience-group-card{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    padding:16px;
+    border:1px solid #e5e5dc;
+    border-radius:14px;
+    background:#fff;
+    box-shadow:0 6px 18px rgba(52, 64, 84, 0.08);
+}
+
+.experience-group-card strong{
+    color:#c45f26;
+    font-size:24px;
+    line-height:1;
+}
+
+.experience-group-card span{
+    color:#344054;
+    font-size:13px;
+    font-weight:700;
+}
+
+@media (max-width:760px){
+    .experience-group-grid{
+        grid-template-columns:repeat(2, minmax(130px, 1fr));
+    }
+}
+
 .drill-table-wrapper{
     overflow-x:auto;
     border:1px solid #e5e5dc;

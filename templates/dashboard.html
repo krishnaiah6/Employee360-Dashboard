@@ -743,35 +743,59 @@ function closeKpiDrill() {
 
 function renderTotalEmployeesDrill() {
     let rows = "";
-    let currentDepartment = "";
-    let departmentCounts = {};
+    const experienceGroups = [
+        { label: "0-3 Years", matches: years => years >= 0 && years <= 3 },
+        { label: "3-6 Years", matches: years => years > 3 && years <= 6 },
+        { label: "7-12 Years", matches: years => years > 6 && years <= 12 },
+        { label: "12+ Years", matches: years => years > 12 }
+    ];
 
-    employeeDrillData.forEach(emp => {
-        const dept = emp.Department || "No Department";
-        departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+    const groupedEmployees = experienceGroups.map(group => ({
+        ...group,
+        employees: employeeDrillData.filter(emp => {
+            const years = Number(emp.TotalExperience);
+            return Number.isFinite(years) && group.matches(years);
+        })
+    }));
+
+    const unspecifiedEmployees = employeeDrillData.filter(emp => {
+        const years = Number(emp.TotalExperience);
+        return emp.TotalExperience === null || emp.TotalExperience === "" || !Number.isFinite(years);
     });
 
-    employeeDrillData.forEach(emp => {
-        const dept = emp.Department || "No Department";
+    const groupCards = groupedEmployees.map(group => `
+        <article class="experience-group-card">
+            <strong>${group.employees.length}</strong>
+            <span>${group.label}</span>
+        </article>
+    `).join("");
 
-        if (dept !== currentDepartment) {
-            currentDepartment = dept;
+    const groupsToRender = unspecifiedEmployees.length
+        ? [...groupedEmployees, { label: "Experience Not Specified", employees: unspecifiedEmployees }]
+        : groupedEmployees;
 
-            rows += `
-                <tr class="department-group-row">
-                    <td colspan="4">${dept} (${departmentCounts[dept]} employees)</td>
-                </tr>
-            `;
-        }
-
+    groupsToRender.forEach(group => {
         rows += `
-            <tr>
-                <td>${emp.EmployeeID || "N/A"}</td>
-                <td>${emp.EmployeeName || "N/A"}</td>
-                <td>${emp.Department || "N/A"}</td>
-                <td>${emp.Designation || "N/A"}</td>
+            <tr class="department-group-row">
+                <td colspan="5">${group.label} (${group.employees.length} employees)</td>
             </tr>
         `;
+
+        group.employees.forEach(emp => {
+            const experience = emp.TotalExperience === null || emp.TotalExperience === ""
+                ? "N/A"
+                : `${emp.TotalExperience} years`;
+
+            rows += `
+                <tr>
+                    <td>${emp.EmployeeID || "N/A"}</td>
+                    <td>${emp.EmployeeName || "N/A"}</td>
+                    <td>${experience}</td>
+                    <td>${emp.Department || "N/A"}</td>
+                    <td>${emp.Designation || "N/A"}</td>
+                </tr>
+            `;
+        });
     });
 
     return `
@@ -780,12 +804,16 @@ function renderTotalEmployeesDrill() {
             <span>Total employee records</span>
         </div>
 
+        <h4 class="drill-subtitle">Employees by Experience</h4>
+        <div class="experience-group-grid">${groupCards}</div>
+
         <div class="drill-table-wrapper">
             <table class="drill-table">
                 <thead>
                     <tr>
                         <th>Employee ID</th>
                         <th>Employee Name</th>
+                        <th>Total Experience</th>
                         <th>Department</th>
                         <th>Designation</th>
                     </tr>
