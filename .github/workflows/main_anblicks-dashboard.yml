@@ -2,7 +2,7 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - Anblicks-dashboard
+name: Build and deploy Python app to Azure Web App - Anblicks-Dashboard
 
 on:
   push:
@@ -63,14 +63,14 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_2E99BA135B9D4A239670288DE6CE562A }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_22A44058FEBE4761BF1ACD0671EFB83A }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_D82E7807CF244CCCA711C5B8754A4849 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_81B185C83D5A4A80B1FA58AFF88C9877 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_29F08F9252A24259A8D017FFF1F98B83 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_AAE1CC7B4FFD4CD38501087A0E30F539 }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'Anblicks-dashboard'
+          app-name: 'Anblicks-Dashboard'
           slot-name: 'Production'
           
