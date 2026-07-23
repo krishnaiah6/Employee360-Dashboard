@@ -107,7 +107,6 @@
                 <select id="availabilityFilter" onchange="filterTalent()" aria-label="Filter by availability"><option value="all">All availability</option><option value="bench">On Bench</option><option value="partial">Partially Available</option></select>
                 <select id="certificationFilter" onchange="filterTalent()" aria-label="Filter by certification"><option value="all">All certification</option><option value="certified">Certified</option><option value="not-certified">Not Certified</option></select>
                 <select id="performanceFilter" onchange="filterTalent()" aria-label="Filter by performance"><option value="all">All performance</option></select>
-                <select id="sortFilter" onchange="filterTalent()" aria-label="Sort employees"><option value="availability">Sort: Availability</option><option value="experience-desc">Experience: High to Low</option><option value="experience-asc">Experience: Low to High</option><option value="utilization-asc">Utilization: Low to High</option><option value="skill-match">Best Skill Match</option><option value="performance">Performance</option></select>
                 <button type="button" class="clear-filter" onclick="clearTalentFilters()">Clear Filters</button>
             </div>
             <p class="result-summary" id="talentResultSummary"></p>
@@ -204,6 +203,14 @@ const kpiModalConfig = {
 let activeKpiRows = [];
 let activeKpiColumns = [];
 
+function compareDepartmentThenExperience(a, b) {
+    const departmentA = String(a.Department || 'Unassigned');
+    const departmentB = String(b.Department || 'Unassigned');
+    return departmentA.localeCompare(departmentB, undefined, {sensitivity: 'base'})
+        || Number(b.TotalExperience || 0) - Number(a.TotalExperience || 0)
+        || String(a.EmployeeID || '').localeCompare(String(b.EmployeeID || ''));
+}
+
 function displayKpiValue(key, value) {
     if (key === 'Utilization') return `${Number(value || 0)}%`;
     if (key === 'TotalExperience') return `${Number(value || 0)} years`;
@@ -239,7 +246,7 @@ function renderKpiRows(rows) {
 
 function openKpiModal(type) {
     const config = kpiModalConfig[type];
-    activeKpiRows = kpiDrillData[type] || [];
+    activeKpiRows = [...(kpiDrillData[type] || [])].sort(compareDepartmentThenExperience);
     activeKpiColumns = config.columns;
 
     document.getElementById('kpiModalTitle').textContent = config.title;
@@ -350,7 +357,6 @@ function filterTalent() {
     const availability = document.getElementById('availabilityFilter').value;
     const certification = document.getElementById('certificationFilter').value;
     const performance = document.getElementById('performanceFilter').value;
-    const sort = document.getElementById('sortFilter').value;
 
     filteredTalent = internalTalent.map((employee) => ({...employee, SkillMatches: requestedSkills.filter((skill) => textValue(employee.Skills, '').toLowerCase().includes(skill)).length})).filter((employee) => {
         const searchable = [employee.EmployeeName, employee.EmployeeID, employee.Designation, employee.Department, employee.Location, employee.Skills].join(' ').toLowerCase();
@@ -362,21 +368,13 @@ function filterTalent() {
             (performance === 'all' || textValue(employee.PerformanceRating, 'Not rated').toLowerCase() === performance);
     });
 
-    const performanceRank = {'outstanding': 5, 'exceeds expectations': 4, 'meets expectations': 3, 'below expectations': 2, 'not rated': 1};
-    filteredTalent.sort((a, b) => {
-        if (sort === 'experience-desc') return numericValue(b.TotalExperience) - numericValue(a.TotalExperience);
-        if (sort === 'experience-asc') return numericValue(a.TotalExperience) - numericValue(b.TotalExperience);
-        if (sort === 'utilization-asc' || sort === 'availability') return numericValue(a.Utilization) - numericValue(b.Utilization) || numericValue(b.TotalExperience) - numericValue(a.TotalExperience);
-        if (sort === 'skill-match') return b.SkillMatches - a.SkillMatches || numericValue(a.Utilization) - numericValue(b.Utilization);
-        if (sort === 'performance') return (performanceRank[textValue(b.PerformanceRating, 'Not rated').toLowerCase()] || 0) - (performanceRank[textValue(a.PerformanceRating, 'Not rated').toLowerCase()] || 0);
-        return 0;
-    });
+    filteredTalent.sort(compareDepartmentThenExperience);
     renderTalent(filteredTalent);
     const bench = filteredTalent.filter((e) => numericValue(e.Utilization) === 0).length;
     document.getElementById('talentResultSummary').textContent = `${filteredTalent.length} employees found · ${bench} on bench · ${filteredTalent.length - bench} partially available`;
 }
 
-function clearTalentFilters() { ['talentSearch', 'skillFilter'].forEach((id) => document.getElementById(id).value = ''); ['experienceFilter', 'departmentFilter', 'locationFilter', 'availabilityFilter', 'certificationFilter', 'performanceFilter'].forEach((id) => document.getElementById(id).value = 'all'); document.getElementById('sortFilter').value = 'availability'; filterTalent(); }
+function clearTalentFilters() { ['talentSearch', 'skillFilter'].forEach((id) => document.getElementById(id).value = ''); ['experienceFilter', 'departmentFilter', 'locationFilter', 'availabilityFilter', 'certificationFilter', 'performanceFilter'].forEach((id) => document.getElementById(id).value = 'all'); filterTalent(); }
 function openProjectModal(employee) { document.getElementById('projectModalTitle').textContent = `${textValue(employee.EmployeeName)} — Projects`; document.getElementById('projectModalSubtitle').textContent = `${textValue(employee.EmployeeID)} · ${textValue(employee.Designation)}`; document.getElementById('currentProjects').textContent = textValue(employee.CurrentProjects, 'No active projects'); document.getElementById('completedProjects').textContent = textValue(employee.ProjectHistory, 'No completed projects recorded'); document.getElementById('projectTechnologies').textContent = textValue(employee.Technologies, 'No project technology recorded'); const modal = document.getElementById('projectModal'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('modal-open'); }
 function closeProjectModal() { const modal = document.getElementById('projectModal'); modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('modal-open'); }
 function exportTalentCsv() { const headers = ['Employee ID','Employee Name','Designation','Department','Location','Experience','Utilization','Available Capacity','Skills','Certifications','Performance','Current Projects','Completed Projects']; const rows = filteredTalent.map((e) => [e.EmployeeID,e.EmployeeName,e.Designation,e.Department,e.Location,numericValue(e.TotalExperience),numericValue(e.Utilization),Math.max(0,100-numericValue(e.Utilization)),e.Skills,e.Certifications,e.PerformanceRating,e.CurrentProjects,e.ProjectHistory]); const csv = [headers, ...rows].map((row) => row.map((value) => `"${textValue(value, '').replaceAll('"','""')}"`).join(',')).join('\n'); const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ta_filtered_talent.csv'; link.click(); URL.revokeObjectURL(link.href); }

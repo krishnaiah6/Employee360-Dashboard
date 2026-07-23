@@ -836,7 +836,7 @@ def ta_dashboard():
                 GROUP BY EmployeeID
             ) perf ON perf.EmployeeID = h.EmployeeID
             WHERE COALESCE(a.Utilization, 0) < 100
-            ORDER BY COALESCE(a.Utilization, 0) ASC,
+            ORDER BY COALESCE(NULLIF(TRIM(h.Department), ''), 'Unassigned') ASC,
                      COALESCE(h.TotalExperience, 0) DESC,
                      h.EmployeeID ASC
         """)
@@ -871,7 +871,9 @@ def ta_dashboard():
                    OR LOWER(TRIM(CourseStatus)) = 'completed'
                 GROUP BY EmployeeID
             ) cert ON cert.EmployeeID = h.EmployeeID
-            ORDER BY h.EmployeeID ASC
+            ORDER BY COALESCE(NULLIF(TRIM(h.Department), ''), 'Unassigned') ASC,
+                     COALESCE(h.TotalExperience, 0) DESC,
+                     h.EmployeeID ASC
         """)
         all_employee_details = make_json_safe(cursor.fetchall())
 
