@@ -120,128 +120,6 @@ def get_connection():
         charset="utf8mb4",
         use_unicode=True,
     )
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, abort
-import mysql.connector
-from decimal import Decimal
-from datetime import date, datetime
-import os
-import uuid
-from urllib.parse import urlparse, unquote
-from werkzeug.utils import secure_filename
-
-app = Flask(__name__)
-
-# Always set a strong SECRET_KEY in Render. The fallback is only for local development.
-app.secret_key = os.getenv("SECRET_KEY", "local-development-secret-key")
-
-# Render terminates HTTPS before forwarding requests to Flask. These settings keep
-# session cookies secure in production while still allowing localhost development.
-is_production = os.getenv("RENDER", "").lower() == "true" or os.getenv("FLASK_ENV") == "production"
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=is_production,
-)
-
-CERTIFICATE_UPLOAD_FOLDER = os.getenv(
-    "CERTIFICATE_UPLOAD_FOLDER",
-    os.path.join(app.root_path, "uploads", "certificates"),
-)
-ALLOWED_CERTIFICATE_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
-MAX_CERTIFICATE_FILE_SIZE = 5 * 1024 * 1024
-
-app.config["MAX_CONTENT_LENGTH"] = MAX_CERTIFICATE_FILE_SIZE
-os.makedirs(CERTIFICATE_UPLOAD_FOLDER, exist_ok=True)
-
-def allowed_certificate_file(filename):
-    return (
-        "." in filename
-        and filename.rsplit(".", 1)[1].lower() in ALLOWED_CERTIFICATE_EXTENSIONS
-    )
-
-def is_valid_http_url(value):
-    try:
-        parsed = urlparse(value)
-        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
-    except ValueError:
-        return False
-
-def make_json_safe(rows):
-    safe_rows = []
-
-    for row in rows:
-        safe_row = {}
-
-        for key, value in row.items():
-            if isinstance(value, Decimal):
-                safe_row[key] = float(value)
-            elif isinstance(value, (date, datetime)):
-                safe_row[key] = value.strftime("%Y-%m-%d")
-            else:
-                safe_row[key] = value
-
-        safe_rows.append(safe_row)
-
-    return safe_rows
-
-def get_connection():
-    """Connect to Railway on Render and local MySQL during development.
-
-    On Render, use the DB_HOST, DB_PORT, DB_USER, DB_PASSWORD and DB_NAME
-    environment variables. DATABASE_URL/MYSQL_URL are also supported.
-    """
-    is_render = os.getenv("RENDER", "").lower() == "true"
-
-    # Prefer the explicit DB_* variables configured in Render.
-    explicit_host = os.getenv("DB_HOST")
-    if explicit_host:
-        config = {
-            "host": explicit_host,
-            "port": int(os.getenv("DB_PORT", "3306")),
-            "user": os.getenv("DB_USER", "root"),
-            "password": os.getenv("DB_PASSWORD", ""),
-            "database": os.getenv("DB_NAME", "railway"),
-        }
-    else:
-        database_url = os.getenv("DATABASE_URL") or os.getenv("MYSQL_PUBLIC_URL") or os.getenv("MYSQL_URL")
-
-        if database_url:
-            parsed = urlparse(database_url)
-            if parsed.scheme not in {"mysql", "mysql2"}:
-                raise ValueError("Database URL must use the mysql:// scheme")
-
-            config = {
-                "host": parsed.hostname,
-                "port": parsed.port or 3306,
-                "user": unquote(parsed.username or ""),
-                "password": unquote(parsed.password or ""),
-                "database": unquote(parsed.path.lstrip("/")) or "railway",
-            }
-        elif not is_render:
-            config = {
-                "host": os.getenv("LOCAL_DB_HOST", "localhost"),
-                "port": int(os.getenv("LOCAL_DB_PORT", "3306")),
-                "user": os.getenv("LOCAL_DB_USER", "root"),
-                "password": os.getenv("LOCAL_DB_PASSWORD", "your_actual_mysql_password"),
-                "database": os.getenv("LOCAL_DB_NAME", "employee360_test"),
-            }
-        else:
-            raise RuntimeError(
-                "Render database variables are missing. Add DB_HOST, DB_PORT, "
-                "DB_USER, DB_PASSWORD and DB_NAME."
-            )
-
-    missing = [key for key in ("host", "user", "database") if not config.get(key)]
-    if missing:
-        raise RuntimeError("Missing database configuration: " + ", ".join(missing))
-
-    return mysql.connector.connect(
-        **config,
-        connection_timeout=20,
-        autocommit=False,
-        charset="utf8mb4",
-        use_unicode=True,
-    )
 
 
 @app.route("/")
@@ -249,7 +127,7 @@ def dashboard():
     if "user_email" not in session:
         return redirect(url_for("login"))
 
-    if session.get("role") not in ["RMG", "TA"]:
+    if session.get("role") != "RMG":
         session.clear()
         flash("You do not have permission to access the dashboard.", "error")
         return redirect(url_for("login"))
@@ -819,6 +697,238 @@ def dashboard():
             conn.close()
 
 
+@app.route("/ta-dashboard")
+def ta_dashboard():
+    """Talent Acquisition dashboard using demonstration data for phase one."""
+    if "user_email" not in session:
+        return redirect(url_for("login"))
+
+    if session.get("role") != "TA":
+        flash("You do not have permission to access the TA dashboard.", "error")
+        if session.get("role") == "RMG":
+            return redirect(url_for("dashboard"))
+        if session.get("role") == "EMPLOYEE":
+            return redirect(url_for("employee_dashboard"))
+        if session.get("role") in ["L&D", "LND"]:
+            return redirect(url_for("lnd_dashboard"))
+        session.clear()
+        return redirect(url_for("login"))
+
+    conn = None
+    cursor = None
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Active allocation is calculated employee-wise from current projects.
+        allocation_sql = """
+            SELECT EmployeeID, SUM(COALESCE(AllocationPercentage, 0)) AS Utilization
+            FROM project_management
+            WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
+              AND (ProjectEndDate IS NULL OR ProjectEndDate >= CURDATE())
+            GROUP BY EmployeeID
+        """
+
+        cursor.execute("SELECT COUNT(*) AS total FROM hrms_data")
+        total_employees = cursor.fetchone()["total"] or 0
+
+        cursor.execute(f"""
+            SELECT
+                SUM(CASE WHEN COALESCE(a.Utilization, 0) = 0 THEN 1 ELSE 0 END) AS bench,
+                SUM(CASE WHEN COALESCE(a.Utilization, 0) > 0
+                          AND COALESCE(a.Utilization, 0) < 100 THEN 1 ELSE 0 END) AS underutilized,
+                SUM(CASE WHEN COALESCE(a.Utilization, 0) >= 100 THEN 1 ELSE 0 END) AS fully_allocated
+            FROM hrms_data h
+            LEFT JOIN ({allocation_sql}) a ON a.EmployeeID = h.EmployeeID
+        """)
+        availability = cursor.fetchone() or {}
+
+        cursor.execute("""
+            SELECT COUNT(DISTINCT EmployeeID) AS certified
+            FROM lms
+            WHERE LOWER(TRIM(CertificationStatus)) = 'completed'
+               OR LOWER(TRIM(CourseStatus)) = 'completed'
+        """)
+        certified_employees = cursor.fetchone()["certified"] or 0
+
+        cursor.execute("""
+            SELECT
+                CASE
+                    WHEN COALESCE(TotalExperience, 0) <= 3 THEN '0–3 years'
+                    WHEN TotalExperience <= 6 THEN '3–6 years'
+                    WHEN TotalExperience <= 12 THEN '7–12 years'
+                    ELSE '12+ years'
+                END AS ExperienceBand,
+                COUNT(*) AS EmployeeCount
+            FROM hrms_data
+            GROUP BY ExperienceBand
+            ORDER BY MIN(COALESCE(TotalExperience, 0))
+        """)
+        experience_distribution = cursor.fetchall()
+
+        cursor.execute(f"""
+            SELECT
+                s.SkillName,
+                COUNT(DISTINCT s.EmployeeID) AS TotalEmployees,
+                COUNT(DISTINCT CASE WHEN COALESCE(a.Utilization, 0) < 100
+                                    THEN s.EmployeeID END) AS AvailableEmployees
+            FROM skills_repository s
+            LEFT JOIN ({allocation_sql}) a ON a.EmployeeID = s.EmployeeID
+            WHERE s.SkillName IS NOT NULL AND TRIM(s.SkillName) <> ''
+            GROUP BY s.SkillName
+            ORDER BY AvailableEmployees ASC, TotalEmployees ASC, s.SkillName ASC
+        """)
+        scarce_skills = cursor.fetchall()
+
+        cursor.execute(f"""
+            SELECT
+                h.EmployeeID,
+                h.EmployeeName,
+                h.Department,
+                h.Designation,
+                h.Location,
+                h.TotalExperience,
+                COALESCE(a.Utilization, 0) AS Utilization,
+                COALESCE(sk.Skills, 'No skills recorded') AS Skills,
+                COALESCE(cert.Certifications, 'No completed certifications') AS Certifications,
+                COALESCE(hist.Technologies, 'No project technology recorded') AS Technologies,
+                COALESCE(active_projects.CurrentProjects, 'No active projects') AS CurrentProjects,
+                COALESCE(hist.ProjectHistory, 'No completed projects recorded') AS ProjectHistory,
+                perf.PerformanceRating
+            FROM hrms_data h
+            LEFT JOIN ({allocation_sql}) a ON a.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(DISTINCT SkillName ORDER BY SkillName SEPARATOR ', ') AS Skills
+                FROM skills_repository
+                GROUP BY EmployeeID
+            ) sk ON sk.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(DISTINCT CertificationName ORDER BY CertificationName SEPARATOR ', ') AS Certifications
+                FROM lms
+                WHERE LOWER(TRIM(CertificationStatus)) = 'completed'
+                   OR LOWER(TRIM(CourseStatus)) = 'completed'
+                GROUP BY EmployeeID
+            ) cert ON cert.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(
+                           DISTINCT CONCAT(ProjectName, ' (', COALESCE(AllocationPercentage, 0), '%)')
+                           ORDER BY ProjectName SEPARATOR ', '
+                       ) AS CurrentProjects
+                FROM project_management
+                WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
+                  AND (ProjectEndDate IS NULL OR ProjectEndDate >= CURDATE())
+                GROUP BY EmployeeID
+            ) active_projects ON active_projects.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(DISTINCT TechnologyUsed ORDER BY TechnologyUsed SEPARATOR ', ') AS Technologies,
+                       GROUP_CONCAT(DISTINCT ProjectName ORDER BY ProjectName SEPARATOR ', ') AS ProjectHistory
+                FROM project_history
+                GROUP BY EmployeeID
+            ) hist ON hist.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID, MAX(PerformanceRating) AS PerformanceRating
+                FROM performance_management
+                GROUP BY EmployeeID
+            ) perf ON perf.EmployeeID = h.EmployeeID
+            WHERE COALESCE(a.Utilization, 0) < 100
+            ORDER BY COALESCE(a.Utilization, 0) ASC,
+                     COALESCE(h.TotalExperience, 0) DESC,
+                     h.EmployeeID ASC
+        """)
+        internal_talent = cursor.fetchall()
+
+        # Employee details used by the four KPI drill-down modals.
+        cursor.execute(f"""
+            SELECT
+                h.EmployeeID,
+                h.EmployeeName,
+                h.Department,
+                h.Designation,
+                h.Location,
+                h.TotalExperience,
+                COALESCE(a.Utilization, 0) AS Utilization,
+                COALESCE(sk.Skills, 'No skills recorded') AS Skills,
+                COALESCE(cert.Certifications, 'No completed certifications') AS Certifications,
+                CASE WHEN cert.EmployeeID IS NULL THEN 0 ELSE 1 END AS IsCertified
+            FROM hrms_data h
+            LEFT JOIN ({allocation_sql}) a ON a.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(DISTINCT SkillName ORDER BY SkillName SEPARATOR ', ') AS Skills
+                FROM skills_repository
+                GROUP BY EmployeeID
+            ) sk ON sk.EmployeeID = h.EmployeeID
+            LEFT JOIN (
+                SELECT EmployeeID,
+                       GROUP_CONCAT(DISTINCT CertificationName ORDER BY CertificationName SEPARATOR ', ') AS Certifications
+                FROM lms
+                WHERE LOWER(TRIM(CertificationStatus)) = 'completed'
+                   OR LOWER(TRIM(CourseStatus)) = 'completed'
+                GROUP BY EmployeeID
+            ) cert ON cert.EmployeeID = h.EmployeeID
+            ORDER BY h.EmployeeID ASC
+        """)
+        all_employee_details = make_json_safe(cursor.fetchall())
+
+        bench_details = [
+            employee for employee in all_employee_details
+            if float(employee.get("Utilization") or 0) == 0
+        ]
+        partial_details = [
+            employee for employee in all_employee_details
+            if 0 < float(employee.get("Utilization") or 0) < 100
+        ]
+        certified_details = [
+            employee for employee in all_employee_details
+            if int(employee.get("IsCertified") or 0) == 1
+        ]
+
+        cursor.execute("""
+            SELECT Department, COUNT(*) AS EmployeeCount
+            FROM hrms_data
+            WHERE Department IS NOT NULL AND TRIM(Department) <> ''
+            GROUP BY Department
+            ORDER BY EmployeeCount DESC, Department ASC
+        """)
+        department_distribution = cursor.fetchall()
+
+        return render_template(
+            "ta_dashboard.html",
+            kpis={
+                "total_employees": total_employees,
+                "bench": int(availability.get("bench") or 0),
+                "underutilized": int(availability.get("underutilized") or 0),
+                "certified": certified_employees,
+            },
+            experience_distribution=make_json_safe(experience_distribution),
+            scarce_skills=make_json_safe(scarce_skills),
+            internal_talent=make_json_safe(internal_talent),
+            department_distribution=make_json_safe(department_distribution),
+            kpi_drill_data={
+                "total": all_employee_details,
+                "bench": bench_details,
+                "partial": partial_details,
+                "certified": certified_details,
+            },
+        )
+
+    except mysql.connector.Error as error:
+        print("TA dashboard database error:", error)
+        flash("Unable to load TA workforce insights from the database.", "error")
+        return redirect(url_for("login"))
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
 def get_login_stats():
     conn = None
     cursor = None
@@ -921,12 +1031,14 @@ def render_login_page(email_value=""):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    # On GET, an already authenticated RMG/TA user can return to the dashboard.
+    # On GET, return an authenticated user to the page assigned to their role.
     # On POST, always validate the newly submitted credentials. This prevents an
     # existing session from making a wrong password appear to work.
     if request.method == "GET" and "user_email" in session:
-        if session.get("role") in ["RMG", "TA"]:
+        if session.get("role") == "RMG":
             return redirect(url_for("dashboard"))
+        if session.get("role") == "TA":
+            return redirect(url_for("ta_dashboard"))
         if session.get("role") == "EMPLOYEE":
             return redirect(url_for("employee_dashboard"))
         if session.get("role") in ["L&D", "LND"]:
@@ -989,6 +1101,9 @@ def login():
 
             if role in ["L&D", "LND"]:
                 return redirect(url_for("employee_dashboard"))
+
+            if role == "TA":
+                return redirect(url_for("ta_dashboard"))
 
             return redirect(url_for("dashboard"))
 
@@ -2141,4 +2256,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=os.getenv("FLASK_DEBUG", "false").lower() == "true",
     )
-

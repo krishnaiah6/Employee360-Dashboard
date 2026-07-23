@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee360 | TA Workforce Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='ta.css') }}">
+</head>
+<body>
+<div class="ta-layout">
+    <aside class="sidebar">
+        <a class="brand" href="{{ url_for('ta_dashboard') }}"><span>Employee</span><strong>360</strong></a>
+        <nav aria-label="TA navigation">
+            <a class="nav-link active" href="#overview"><span>⌂</span>Overview</a>
+            <a class="nav-link" href="#availability"><span>◉</span>Talent Availability</a>
+            <a class="nav-link" href="#skills"><span>◇</span>Skill Scarcity</a>
+            <a class="nav-link" href="#experience"><span>▥</span>Experience Mix</a>
+        </nav>
+        <div class="sidebar-user">
+            <span class="avatar">TA</span>
+            <div><strong>Talent Acquisition</strong><small>{{ session.get('user_email') }}</small></div>
+        </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">Anblicks</p>
+                <h1>TA Workforce Intelligence</h1>
+            </div>
+            <form action="{{ url_for('logout') }}" method="get"><button class="logout" type="submit">Logout</button></form>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}
+        {% endwith %}
+
+        <section class="kpi-grid" aria-label="Workforce summary">
+            <button type="button" class="kpi-card blue" onclick="openKpiModal('total')"><span class="kpi-icon">♟</span><div><p>Total Employees</p><strong>{{ kpis.total_employees }}</strong><small>Click to view employees</small></div></button>
+            <button type="button" class="kpi-card green" onclick="openKpiModal('bench')"><span class="kpi-icon">✓</span><div><p>Immediately Available</p><strong>{{ kpis.bench }}</strong><small>Click to view bench employees</small></div></button>
+            <button type="button" class="kpi-card orange" onclick="openKpiModal('partial')"><span class="kpi-icon">◔</span><div><p>Partially Available</p><strong>{{ kpis.underutilized }}</strong><small>Click to view available capacity</small></div></button>
+            <button type="button" class="kpi-card violet" onclick="openKpiModal('certified')"><span class="kpi-icon">◆</span><div><p>Certified Talent</p><strong>{{ kpis.certified }}</strong><small>Click to view certifications</small></div></button>
+        </section>
+
+        <div class="top-grid">
+            <section class="panel" id="skills">
+                <div class="panel-heading"><div><h2>Skill Scarcity</h2><p>Skills with the fewest internally available employees appear first</p></div></div>
+                <div class="scarcity-list">
+                    {% for item in scarce_skills %}
+                    <div class="scarcity-row">
+                        <div><strong>{{ item.SkillName }}</strong><small>{{ item.TotalEmployees }} total employee{% if item.TotalEmployees != 1 %}s{% endif %}</small></div>
+                        <span class="availability-count {% if item.AvailableEmployees == 0 %}critical{% elif item.AvailableEmployees <= 2 %}warning{% endif %}">{{ item.AvailableEmployees }} available</span>
+                    </div>
+                    {% else %}<p class="empty">No skill information is available.</p>{% endfor %}
+                </div>
+            </section>
+
+            <section class="panel" id="experience">
+                <div class="panel-heading"><div><h2>Experience Distribution</h2><p>Workforce grouped by total experience</p></div></div>
+                {% set max_exp = experience_distribution|map(attribute='EmployeeCount')|max if experience_distribution else 1 %}
+                {% for item in experience_distribution %}
+                <div class="metric-row">
+                    <div><span>{{ item.ExperienceBand }}</span><strong>{{ item.EmployeeCount }}</strong></div>
+                    <div class="bar-track">
+                        <span
+                            class="dynamic-bar"
+                            data-width="{{ (item.EmployeeCount / max_exp * 100)|round }}"
+                        ></span>
+                    </div>
+                </div>
+                {% else %}<p class="empty">No experience information is available.</p>{% endfor %}
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading"><div><h2>Department Distribution</h2><p>Current employee strength by department</p></div></div>
+                {% set max_dept = department_distribution|map(attribute='EmployeeCount')|max if department_distribution else 1 %}
+                {% for item in department_distribution[:8] %}
+                <div class="metric-row department-row">
+                    <div><span>{{ item.Department }}</span><strong>{{ item.EmployeeCount }}</strong></div>
+                    <div class="bar-track">
+                        <span
+                            class="dynamic-bar"
+                            data-width="{{ (item.EmployeeCount / max_dept * 100)|round }}"
+                        ></span>
+                    </div>
+                </div>
+                {% else %}<p class="empty">No department information is available.</p>{% endfor %}
+            </section>
+        </div>
+
+        <section class="panel talent-panel" id="availability">
+            <div class="panel-heading">
+                <div><h2>Internal Talent Availability</h2><p>Bench employees appear first, followed by partially allocated employees</p></div>
+                <button type="button" class="export-button" onclick="exportTalentCsv()">Export CSV</button>
+            </div>
+            <div class="talent-filters" aria-label="Talent filters">
+                <input id="talentSearch" type="search" placeholder="Search name, skill or designation" oninput="filterTalent()">
+                <input id="skillFilter" type="text" placeholder="Skills: Java, AWS" oninput="filterTalent()" aria-label="Filter by one or more comma-separated skills">
+                <select id="experienceFilter" onchange="filterTalent()" aria-label="Filter by experience">
+                    <option value="all">All experience</option><option value="0-3">0–3 years</option><option value="3-6">3–6 years</option><option value="7-12">7–12 years</option><option value="12+">12+ years</option>
+                </select>
+                <select id="departmentFilter" onchange="filterTalent()" aria-label="Filter by department"><option value="all">All departments</option></select>
+                <select id="locationFilter" onchange="filterTalent()" aria-label="Filter by location"><option value="all">All locations</option></select>
+                <select id="availabilityFilter" onchange="filterTalent()" aria-label="Filter by availability"><option value="all">All availability</option><option value="bench">On Bench</option><option value="partial">Partially Available</option></select>
+                <select id="certificationFilter" onchange="filterTalent()" aria-label="Filter by certification"><option value="all">All certification</option><option value="certified">Certified</option><option value="not-certified">Not Certified</option></select>
+                <select id="performanceFilter" onchange="filterTalent()" aria-label="Filter by performance"><option value="all">All performance</option></select>
+                <select id="sortFilter" onchange="filterTalent()" aria-label="Sort employees"><option value="availability">Sort: Availability</option><option value="experience-desc">Experience: High to Low</option><option value="experience-asc">Experience: Low to High</option><option value="utilization-asc">Utilization: Low to High</option><option value="skill-match">Best Skill Match</option><option value="performance">Performance</option></select>
+                <button type="button" class="clear-filter" onclick="clearTalentFilters()">Clear Filters</button>
+            </div>
+            <p class="result-summary" id="talentResultSummary"></p>
+            <div class="table-wrap">
+                <table id="talentTable">
+                    <thead><tr><th>Employee</th><th>Role / Department</th><th>Experience</th><th>Utilization</th><th>Available Capacity</th><th>Skills</th><th>Certifications</th><th>Performance</th><th>Projects</th></tr></thead>
+                    <tbody id="talentTableBody"></tbody>
+                </table>
+            </div>
+            <p class="method-note">Availability is based on active project allocation. Performance is supporting context only and should not be used as an automatic employment decision.</p>
+        </section>
+    </main>
+</div>
+
+<div class="kpi-modal" id="kpiModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="kpiModalTitle">
+    <div class="kpi-modal-backdrop" onclick="closeKpiModal()"></div>
+    <section class="kpi-modal-card">
+        <header class="kpi-modal-header">
+            <div><h2 id="kpiModalTitle">Employee Details</h2><p id="kpiModalCount"></p></div>
+            <button type="button" class="modal-close" onclick="closeKpiModal()" aria-label="Close">×</button>
+        </header>
+        <div class="kpi-modal-tools">
+            <input id="kpiModalSearch" type="search" placeholder="Search employee, department, skill or certification" oninput="filterKpiModal()">
+            <select id="kpiExperienceFilter" onchange="filterKpiModal()" aria-label="Filter by experience">
+                <option value="all">All experience</option>
+                <option value="0-3">0–3 years</option>
+                <option value="3-6">3–6 years</option>
+                <option value="7-12">7–12 years</option>
+                <option value="12+">12+ years</option>
+            </select>
+        </div>
+        <div class="modal-table-wrap">
+            <table>
+                <thead id="kpiModalHead"></thead>
+                <tbody id="kpiModalBody"></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div class="project-modal" id="projectModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
+    <div class="kpi-modal-backdrop" onclick="closeProjectModal()"></div>
+    <section class="project-modal-card">
+        <header class="kpi-modal-header"><div><h2 id="projectModalTitle">Employee Projects</h2><p id="projectModalSubtitle"></p></div><button type="button" class="modal-close" onclick="closeProjectModal()" aria-label="Close">×</button></header>
+        <div class="project-detail-grid"><article><h3>Current projects</h3><p id="currentProjects"></p></article><article><h3>Completed projects</h3><p id="completedProjects"></p></article><article><h3>Project technologies</h3><p id="projectTechnologies"></p></article></div>
+    </section>
+</div>
+
+<script type="application/json" id="kpiDrillData">{{ kpi_drill_data | tojson }}</script>
+<script type="application/json" id="internalTalentData">{{ internal_talent | tojson }}</script>
+
+<script>
+document.querySelectorAll('.dynamic-bar').forEach((bar) => {
+    const width = Number(bar.dataset.width) || 0;
+    bar.style.width = `${Math.min(Math.max(width, 0), 100)}%`;
+});
+
+const kpiDrillData = JSON.parse(document.getElementById('kpiDrillData').textContent);
+const kpiModalConfig = {
+    total: {
+        title: 'Total Employees',
+        columns: [
+            ['EmployeeID', 'Employee ID'], ['EmployeeName', 'Employee Name'],
+            ['Department', 'Department'], ['Designation', 'Designation'],
+            ['TotalExperience', 'Experience'], ['Location', 'Location']
+        ]
+    },
+    bench: {
+        title: 'Immediately Available Employees',
+        columns: [
+            ['EmployeeID', 'Employee ID'], ['EmployeeName', 'Employee Name'],
+            ['Designation', 'Designation'], ['TotalExperience', 'Experience'],
+            ['Skills', 'Skills'], ['Certifications', 'Certifications']
+        ]
+    },
+    partial: {
+        title: 'Partially Available Employees',
+        columns: [
+            ['EmployeeID', 'Employee ID'], ['EmployeeName', 'Employee Name'],
+            ['Department', 'Department'], ['Utilization', 'Utilization'],
+            ['Skills', 'Skills'], ['TotalExperience', 'Experience']
+        ]
+    },
+    certified: {
+        title: 'Certified Talent',
+        columns: [
+            ['EmployeeID', 'Employee ID'], ['EmployeeName', 'Employee Name'],
+            ['Department', 'Department'], ['Designation', 'Designation'],
+            ['Certifications', 'Completed Certifications'], ['Skills', 'Skills']
+        ]
+    }
+};
+
+let activeKpiRows = [];
+let activeKpiColumns = [];
+
+function displayKpiValue(key, value) {
+    if (key === 'Utilization') return `${Number(value || 0)}%`;
+    if (key === 'TotalExperience') return `${Number(value || 0)} years`;
+    return value === null || value === undefined || value === '' ? 'Not recorded' : String(value);
+}
+
+function renderKpiRows(rows) {
+    const body = document.getElementById('kpiModalBody');
+    body.replaceChildren();
+
+    if (!rows.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = activeKpiColumns.length;
+        cell.className = 'modal-empty';
+        cell.textContent = 'No matching employees found.';
+        row.appendChild(cell);
+        body.appendChild(row);
+        return;
+    }
+
+    rows.forEach((employee) => {
+        const row = document.createElement('tr');
+        activeKpiColumns.forEach(([key]) => {
+            const cell = document.createElement('td');
+            cell.textContent = displayKpiValue(key, employee[key]);
+            if (key === 'Skills' || key === 'Certifications') cell.className = 'modal-wrap-cell';
+            row.appendChild(cell);
+        });
+        body.appendChild(row);
+    });
+}
+
+function openKpiModal(type) {
+    const config = kpiModalConfig[type];
+    activeKpiRows = kpiDrillData[type] || [];
+    activeKpiColumns = config.columns;
+
+    document.getElementById('kpiModalTitle').textContent = config.title;
+    document.getElementById('kpiModalCount').textContent = `${activeKpiRows.length} employee${activeKpiRows.length === 1 ? '' : 's'}`;
+    document.getElementById('kpiModalSearch').value = '';
+    document.getElementById('kpiExperienceFilter').value = 'all';
+
+    const header = document.getElementById('kpiModalHead');
+    header.replaceChildren();
+    const row = document.createElement('tr');
+    activeKpiColumns.forEach(([, label]) => {
+        const cell = document.createElement('th');
+        cell.textContent = label;
+        row.appendChild(cell);
+    });
+    header.appendChild(row);
+
+    renderKpiRows(activeKpiRows);
+    const modal = document.getElementById('kpiModal');
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    document.getElementById('kpiModalSearch').focus();
+}
+
+function closeKpiModal() {
+    const modal = document.getElementById('kpiModal');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+}
+
+function filterKpiModal() {
+    const query = document.getElementById('kpiModalSearch').value.trim().toLowerCase();
+    const experienceRange = document.getElementById('kpiExperienceFilter').value;
+    const filtered = activeKpiRows.filter((employee) => {
+        const matchesSearch = activeKpiColumns.some(([key]) =>
+            displayKpiValue(key, employee[key]).toLowerCase().includes(query)
+        );
+        const experience = Number(employee.TotalExperience || 0);
+        let matchesExperience = true;
+
+        if (experienceRange === '0-3') matchesExperience = experience <= 3;
+        if (experienceRange === '3-6') matchesExperience = experience > 3 && experience <= 6;
+        if (experienceRange === '7-12') matchesExperience = experience > 6 && experience <= 12;
+        if (experienceRange === '12+') matchesExperience = experience > 12;
+
+        return matchesSearch && matchesExperience;
+    });
+    document.getElementById('kpiModalCount').textContent = `${filtered.length} of ${activeKpiRows.length} employees`;
+    renderKpiRows(filtered);
+}
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeKpiModal();
+});
+
+const internalTalent = JSON.parse(document.getElementById('internalTalentData').textContent);
+let filteredTalent = [];
+
+function textValue(value, fallback = 'Not recorded') { return value === null || value === undefined || value === '' ? fallback : String(value); }
+function numericValue(value) { return Number(value || 0); }
+function isCertified(employee) { return !textValue(employee.Certifications, '').toLowerCase().startsWith('no completed'); }
+function experienceMatches(value, range) {
+    if (range === '0-3') return value <= 3;
+    if (range === '3-6') return value > 3 && value <= 6;
+    if (range === '7-12') return value > 6 && value <= 12;
+    if (range === '12+') return value > 12;
+    return true;
+}
+
+function populateSelect(id, values) {
+    const select = document.getElementById(id);
+    [...new Set(values.filter(Boolean).map(String))].sort((a, b) => a.localeCompare(b)).forEach((value) => {
+        const option = document.createElement('option'); option.value = value.toLowerCase(); option.textContent = value; select.appendChild(option);
+    });
+}
+
+function renderTalent(rows) {
+    const body = document.getElementById('talentTableBody'); body.replaceChildren();
+    if (!rows.length) {
+        const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 9; cell.className = 'empty'; cell.textContent = 'No employees match the selected filters.'; row.appendChild(cell); body.appendChild(row); return;
+    }
+    rows.forEach((employee) => {
+        const utilization = numericValue(employee.Utilization); const capacity = Math.max(0, 100 - utilization);
+        const row = document.createElement('tr');
+        const cells = [
+            `<strong>${escapeHtml(textValue(employee.EmployeeName))}</strong><small>${escapeHtml(textValue(employee.EmployeeID))} · ${escapeHtml(textValue(employee.Location, 'Location not recorded'))}</small>`,
+            `${escapeHtml(textValue(employee.Designation))}<small>${escapeHtml(textValue(employee.Department, 'Department not recorded'))}</small>`,
+            `${numericValue(employee.TotalExperience)} years`,
+            `<span class="utilization ${utilization === 0 ? 'bench' : 'partial'}">${utilization === 0 ? 'On Bench' : `${utilization}%`}</span>`,
+            `<strong class="capacity-value">${capacity}%</strong>`, escapeHtml(textValue(employee.Skills)), escapeHtml(textValue(employee.Certifications)), escapeHtml(textValue(employee.PerformanceRating, 'Not rated')),
+            `<button type="button" class="project-button">View projects</button>`
+        ];
+        cells.forEach((content, index) => { const cell = document.createElement('td'); cell.innerHTML = content; if ([5, 6].includes(index)) cell.className = 'wrap-cell'; row.appendChild(cell); });
+        row.querySelector('.project-button').addEventListener('click', () => openProjectModal(employee)); body.appendChild(row);
+    });
+}
+
+function escapeHtml(value) { const span = document.createElement('span'); span.textContent = value; return span.innerHTML; }
+
+function filterTalent() {
+    const query = document.getElementById('talentSearch').value.trim().toLowerCase();
+    const requestedSkills = document.getElementById('skillFilter').value.split(',').map((skill) => skill.trim().toLowerCase()).filter(Boolean);
+    const experience = document.getElementById('experienceFilter').value;
+    const department = document.getElementById('departmentFilter').value;
+    const location = document.getElementById('locationFilter').value;
+    const availability = document.getElementById('availabilityFilter').value;
+    const certification = document.getElementById('certificationFilter').value;
+    const performance = document.getElementById('performanceFilter').value;
+    const sort = document.getElementById('sortFilter').value;
+
+    filteredTalent = internalTalent.map((employee) => ({...employee, SkillMatches: requestedSkills.filter((skill) => textValue(employee.Skills, '').toLowerCase().includes(skill)).length})).filter((employee) => {
+        const searchable = [employee.EmployeeName, employee.EmployeeID, employee.Designation, employee.Department, employee.Location, employee.Skills].join(' ').toLowerCase();
+        const utilization = numericValue(employee.Utilization);
+        return searchable.includes(query) && requestedSkills.every((skill) => textValue(employee.Skills, '').toLowerCase().includes(skill)) && experienceMatches(numericValue(employee.TotalExperience), experience) &&
+            (department === 'all' || textValue(employee.Department, '').toLowerCase() === department) && (location === 'all' || textValue(employee.Location, '').toLowerCase() === location) &&
+            (availability === 'all' || (availability === 'bench' && utilization === 0) || (availability === 'partial' && utilization > 0 && utilization < 100)) &&
+            (certification === 'all' || (certification === 'certified' && isCertified(employee)) || (certification === 'not-certified' && !isCertified(employee))) &&
+            (performance === 'all' || textValue(employee.PerformanceRating, 'Not rated').toLowerCase() === performance);
+    });
+
+    const performanceRank = {'outstanding': 5, 'exceeds expectations': 4, 'meets expectations': 3, 'below expectations': 2, 'not rated': 1};
+    filteredTalent.sort((a, b) => {
+        if (sort === 'experience-desc') return numericValue(b.TotalExperience) - numericValue(a.TotalExperience);
+        if (sort === 'experience-asc') return numericValue(a.TotalExperience) - numericValue(b.TotalExperience);
+        if (sort === 'utilization-asc' || sort === 'availability') return numericValue(a.Utilization) - numericValue(b.Utilization) || numericValue(b.TotalExperience) - numericValue(a.TotalExperience);
+        if (sort === 'skill-match') return b.SkillMatches - a.SkillMatches || numericValue(a.Utilization) - numericValue(b.Utilization);
+        if (sort === 'performance') return (performanceRank[textValue(b.PerformanceRating, 'Not rated').toLowerCase()] || 0) - (performanceRank[textValue(a.PerformanceRating, 'Not rated').toLowerCase()] || 0);
+        return 0;
+    });
+    renderTalent(filteredTalent);
+    const bench = filteredTalent.filter((e) => numericValue(e.Utilization) === 0).length;
+    document.getElementById('talentResultSummary').textContent = `${filteredTalent.length} employees found · ${bench} on bench · ${filteredTalent.length - bench} partially available`;
+}
+
+function clearTalentFilters() { ['talentSearch', 'skillFilter'].forEach((id) => document.getElementById(id).value = ''); ['experienceFilter', 'departmentFilter', 'locationFilter', 'availabilityFilter', 'certificationFilter', 'performanceFilter'].forEach((id) => document.getElementById(id).value = 'all'); document.getElementById('sortFilter').value = 'availability'; filterTalent(); }
+function openProjectModal(employee) { document.getElementById('projectModalTitle').textContent = `${textValue(employee.EmployeeName)} — Projects`; document.getElementById('projectModalSubtitle').textContent = `${textValue(employee.EmployeeID)} · ${textValue(employee.Designation)}`; document.getElementById('currentProjects').textContent = textValue(employee.CurrentProjects, 'No active projects'); document.getElementById('completedProjects').textContent = textValue(employee.ProjectHistory, 'No completed projects recorded'); document.getElementById('projectTechnologies').textContent = textValue(employee.Technologies, 'No project technology recorded'); const modal = document.getElementById('projectModal'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('modal-open'); }
+function closeProjectModal() { const modal = document.getElementById('projectModal'); modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('modal-open'); }
+function exportTalentCsv() { const headers = ['Employee ID','Employee Name','Designation','Department','Location','Experience','Utilization','Available Capacity','Skills','Certifications','Performance','Current Projects','Completed Projects']; const rows = filteredTalent.map((e) => [e.EmployeeID,e.EmployeeName,e.Designation,e.Department,e.Location,numericValue(e.TotalExperience),numericValue(e.Utilization),Math.max(0,100-numericValue(e.Utilization)),e.Skills,e.Certifications,e.PerformanceRating,e.CurrentProjects,e.ProjectHistory]); const csv = [headers, ...rows].map((row) => row.map((value) => `"${textValue(value, '').replaceAll('"','""')}"`).join(',')).join('\n'); const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ta_filtered_talent.csv'; link.click(); URL.revokeObjectURL(link.href); }
+
+populateSelect('departmentFilter', internalTalent.map((e) => e.Department));
+populateSelect('locationFilter', internalTalent.map((e) => e.Location));
+populateSelect('performanceFilter', internalTalent.map((e) => textValue(e.PerformanceRating, 'Not rated')));
+filterTalent();
+</script>
+</body>
+</html>
