@@ -61,65 +61,54 @@ def make_json_safe(rows):
         safe_rows.append(safe_row)
 
     return safe_rows
-
 def get_connection():
-    """Connect to Railway on Render and local MySQL during development.
+    """Connect to Railway MySQL from Render or local MySQL during development."""
 
-    On Render, use the DB_HOST, DB_PORT, DB_USER, DB_PASSWORD and DB_NAME
-    environment variables. DATABASE_URL/MYSQL_URL are also supported.
-    """
-    is_render = os.getenv("RENDER", "").lower() == "true"
+    database_url = (
+        os.getenv("MYSQL_PUBLIC_URL")
+        or os.getenv("DATABASE_URL")
+        or os.getenv("MYSQL_URL")
+    )
 
-    # Prefer the explicit DB_* variables configured in Render.
-    explicit_host = os.getenv("DB_HOST")
-    if explicit_host:
+    if database_url:
+        parsed = urlparse(database_url)
+
+        if parsed.scheme not in {"mysql", "mysql2"}:
+            raise ValueError("Database URL must use mysql:// scheme")
+
         config = {
-            "host": explicit_host,
+            "host": parsed.hostname,
+            "port": parsed.port or 3306,
+            "user": unquote(parsed.username or ""),
+            "password": unquote(parsed.password or ""),
+            "database": unquote(parsed.path.lstrip("/")) or "railway",
+        }
+
+    else:
+        config = {
+            "host": os.getenv("DB_HOST", "localhost"),
             "port": int(os.getenv("DB_PORT", "3306")),
             "user": os.getenv("DB_USER", "root"),
             "password": os.getenv("DB_PASSWORD", ""),
             "database": os.getenv("DB_NAME", "railway"),
         }
-    else:
-        database_url = os.getenv("DATABASE_URL") or os.getenv("MYSQL_PUBLIC_URL") or os.getenv("MYSQL_URL")
 
-        if database_url:
-            parsed = urlparse(database_url)
-            if parsed.scheme not in {"mysql", "mysql2"}:
-                raise ValueError("Database URL must use the mysql:// scheme")
+    missing = [
+        key for key in ("host", "user", "database")
+        if not config.get(key)
+    ]
 
-            config = {
-                "host": parsed.hostname,
-                "port": parsed.port or 3306,
-                "user": unquote(parsed.username or ""),
-                "password": unquote(parsed.password or ""),
-                "database": unquote(parsed.path.lstrip("/")) or "railway",
-            }
-        elif not is_render:
-            config = {
-                "host": os.getenv("LOCAL_DB_HOST", "localhost"),
-                "port": int(os.getenv("LOCAL_DB_PORT", "3306")),
-                "user": os.getenv("LOCAL_DB_USER", "root"),
-                "password": os.getenv("LOCAL_DB_PASSWORD", "your_actual_mysql_password"),
-                "database": os.getenv("LOCAL_DB_NAME", "employee360_test"),
-            }
-        else:
-            raise RuntimeError(
-                "Render database variables are missing. Add DB_HOST, DB_PORT, "
-                "DB_USER, DB_PASSWORD and DB_NAME."
-            )
-
-    missing = [key for key in ("host", "user", "database") if not config.get(key)]
     if missing:
-        raise RuntimeError("Missing database configuration: " + ", ".join(missing))
+        raise RuntimeError(
+            "Missing database configuration: " + ", ".join(missing)
+        )
 
     return mysql.connector.connect(
         **config,
-        connection_timeout=20,
+        connection_timeout=30,
         autocommit=False,
         charset="utf8mb4",
         use_unicode=True,
-        ssl_disabled=True,
     )
 
 
