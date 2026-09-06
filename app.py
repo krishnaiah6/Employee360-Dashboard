@@ -2257,7 +2257,28 @@ def logout():
     session.clear()
     flash("You have been logged out successfully.", "success")
     return redirect(url_for("login"))
+@app.route("/db-test")
+def db_test():
+    conn = None
 
+    try:
+        conn = get_connection()
+
+        return {
+            "status": "success",
+            "message": "Render connected to Railway MySQL successfully"
+        }, 200
+
+    except Exception as e:
+        return {
+            "status": "failed",
+            "error_type": type(e).__name__,
+            "error": str(e)
+        }, 500
+
+    finally:
+        if conn and conn.is_connected():
+            conn.close()
 if __name__ == "__main__":
     # Render starts this application with Gunicorn. This block is for localhost.
     app.run(
