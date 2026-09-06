@@ -119,6 +119,7 @@ def get_connection():
         autocommit=False,
         charset="utf8mb4",
         use_unicode=True,
+        ssl_disabled=True,
     )
 
 
@@ -930,7 +931,6 @@ def ta_dashboard():
         if conn and conn.is_connected():
             conn.close()
 
-
 def get_login_stats():
     conn = None
     cursor = None
@@ -939,71 +939,78 @@ def get_login_stats():
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Total employees
-        cursor.execute("""
-            SELECT COUNT(*) AS total
-            FROM hrms_data
-        """)
-        headcount = cursor.fetchone()["total"] or 0
+        query = """
+            SELECT
+                COUNT(*) AS headcount,
 
-        # Average utilization
-        cursor.execute("""
-            SELECT ROUND(AVG(TotalAllocation), 2) AS avg_utilization
-            FROM (
-                SELECT
-                    h.EmployeeID,
-                    COALESCE(a.TotalAllocation, 0) AS TotalAllocation
-                FROM hrms_data h
-                LEFT JOIN (
-                    SELECT
-                        EmployeeID,
-                        SUM(COALESCE(AllocationPercentage, 0)) AS TotalAllocation
-                    FROM project_management
-                    WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
-                      AND COALESCE(AllocationPercentage, 0) > 0
-                      AND (
-                          ProjectEndDate IS NULL
-                          OR ProjectEndDate >= CURDATE()
-                      )
-                    GROUP BY EmployeeID
-                ) a
-                ON h.EmployeeID = a.EmployeeID
-            ) employee_utilization
-        """)
+                ROUND(
+                    COALESCE(
+                        AVG(COALESCE(a.TotalAllocation, 0)),
+                        0
+                    ),
+                    2
+                ) AS avg_utilization,
 
-        avg_utilization = cursor.fetchone()["avg_utilization"] or 0
+                SUM(
+                    CASE
+                        WHEN COALESCE(a.TotalAllocation, 0) = 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS bench_count
 
-        # On bench employees
-        cursor.execute("""
-            SELECT COUNT(*) AS bench_count
             FROM hrms_data h
+
             LEFT JOIN (
                 SELECT
                     EmployeeID,
-                    SUM(COALESCE(AllocationPercentage, 0)) AS TotalAllocation
+                    SUM(
+                        COALESCE(AllocationPercentage, 0)
+                    ) AS TotalAllocation
+
                 FROM project_management
+
                 WHERE LOWER(TRIM(ProjectStatus)) = 'in progress'
-                  AND COALESCE(AllocationPercentage, 0) > 0
-                  AND (
-                      ProjectEndDate IS NULL
-                      OR ProjectEndDate >= CURDATE()
-                  )
+
+                    AND COALESCE(
+                        AllocationPercentage, 0
+                    ) > 0
+
+                    AND (
+                        ProjectEndDate IS NULL
+                        OR ProjectEndDate >= CURDATE()
+                    )
+
                 GROUP BY EmployeeID
             ) a
-            ON h.EmployeeID = a.EmployeeID
-            WHERE COALESCE(a.TotalAllocation, 0) = 0
-        """)
 
-        bench_count = cursor.fetchone()["bench_count"] or 0
+            ON h.EmployeeID = a.EmployeeID
+        """
+
+        cursor.execute(query)
+        result = cursor.fetchone()
 
         return {
-            "headcount": headcount,
-            "bench_count": bench_count,
-            "avg_utilization": avg_utilization
+            "headcount": result["headcount"] or 0,
+            "bench_count": result["bench_count"] or 0,
+            "avg_utilization": result["avg_utilization"] or 0
+        }
+
+    except mysql.connector.Error as error:
+        print(
+            "Login stats MySQL error:",
+            getattr(error, "errno", None),
+            str(error)
+        )
+
+        return {
+            "headcount": 0,
+            "bench_count": 0,
+            "avg_utilization": 0
         }
 
     except Exception as error:
-        print("Login stats database error:", error)
+        print("Login stats error:", error)
 
         return {
             "headcount": 0,
