@@ -62,41 +62,38 @@ def make_json_safe(rows):
 
     return safe_rows
 def get_connection():
-    """Connect to Railway MySQL from Render or local MySQL during development."""
+    """
+    Create a MySQL connection using environment variables.
 
-    database_url = (
-        os.getenv("MYSQL_PUBLIC_URL")
-        or os.getenv("DATABASE_URL")
-        or os.getenv("MYSQL_URL")
-    )
+    Designed for Render -> Aiven MySQL.
+    Aiven requires SSL, so TLS is enabled.
+    """
 
-    if database_url:
-        parsed = urlparse(database_url)
+    raw_port = os.getenv("DB_PORT", "3306").strip()
 
-        if parsed.scheme not in {"mysql", "mysql2"}:
-            raise ValueError("Database URL must use mysql:// scheme")
+    try:
+        db_port = int(raw_port)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"DB_PORT must be a number. Current value: {raw_port!r}"
+        ) from exc
 
-        config = {
-            "host": parsed.hostname,
-            "port": parsed.port or 3306,
-            "user": unquote(parsed.username or ""),
-            "password": unquote(parsed.password or ""),
-            "database": unquote(parsed.path.lstrip("/")) or "railway",
-        }
+    config = {
+        "host": os.getenv("DB_HOST", "").strip(),
+        "port": db_port,
+        "user": os.getenv("DB_USER", "").strip(),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "database": os.getenv("DB_NAME", "").strip(),
+    }
 
-    else:
-        config = {
-            "host": os.getenv("DB_HOST", "localhost"),
-            "port": int(os.getenv("DB_PORT", "3306")),
-            "user": os.getenv("DB_USER", "root"),
-            "password": os.getenv("DB_PASSWORD", ""),
-            "database": os.getenv("DB_NAME", "railway"),
-        }
+    missing = []
 
-    missing = [
-        key for key in ("host", "user", "database")
-        if not config.get(key)
-    ]
+    for key in ("host", "user", "database"):
+        if not config.get(key):
+            missing.append(key)
+
+    if not config.get("password"):
+        missing.append("password")
 
     if missing:
         raise RuntimeError(
@@ -104,11 +101,20 @@ def get_connection():
         )
 
     return mysql.connector.connect(
-        **config,
+        host=config["host"],
+        port=config["port"],
+        user=config["user"],
+        password=config["password"],
+        database=config["database"],
         connection_timeout=30,
         autocommit=False,
         charset="utf8mb4",
         use_unicode=True,
+
+        # Aiven MySQL requires SSL.
+        ssl_disabled=False,
+        ssl_verify_cert=False,
+        ssl_verify_identity=False,
     )
 
 
